@@ -276,6 +276,12 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
     # app.doAction('选区应用为蒙版', '选区应用为蒙版')
     if do_action:
         app.doAction(do_action[1], do_action[0])
+    # 72dpi
+    app.doJavaScript("""
+        var desc1 = new ActionDescriptor();
+        desc1.putUnitDouble(charIDToTypeID('Rslt'), charIDToTypeID('#Rsl'), 72);
+        executeAction(stringIDToTypeID('imageSize'), desc1, DialogModes.NO);
+    """)
     doc.saveAs(save_psd_path, ps.PhotoshopSaveOptions())
     doc.close(ps.SaveOptions.DoNotSaveChanges)
 

@@ -6,3 +6,5 @@ temp_mask/
 .git/
 web/.idea
 weight/*
+/manga-remake-dataset.7z
+/start.bat
