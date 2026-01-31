@@ -10,30 +10,275 @@
 </head>
 <body>
 <div id="app">
-    <div style="display: flex; align-items: center;">
-        <el-input v-model="config.match_to_dir" size="small" style="width:400px;"
-                  placeholder="要匹配哪些（例：D:/images/vol.01）">
-            <template slot="prepend">📂</template>
-        </el-input>
-        <el-input v-model="config.match_from_dir" size="small" style="width:400px;"
-                  placeholder="从哪里匹配（例：D:/images/vol.01.zh）">
-            <template slot="prepend">📂</template>
-        </el-input>
-        <el-divider direction="vertical"></el-divider>
-        <el-button type="primary" size="small" @click="startMatch" :disabled="btnDisable">开始匹配</el-button>
-        <el-divider direction="vertical"></el-divider>
-        <el-switch v-model="displayAll" active-text="显示所有匹配率"></el-switch>
-        <el-divider direction="vertical"></el-divider>
-        <el-button type="primary" size="small" @click="configDialogShow = true" style="padding: 2px 5px;">
-            <img src="asset/config.png" alt="config" style="height: 20px">
-        </el-button>
+    <div style="width: 500px;">
+        <div style="border-radius: 5px 5px 0 0; text-align: center; background-color: #fbe2d1; font-size: 18px; padding: 2px 0;">
+            功能区
+        </div>
+        <el-tabs :tab-position="'left'" style="height: 800px;">
+            <el-tab-pane label="图片匹配">
+                <el-collapse>
+                    <el-collapse-item title="功能简介" name="1">
+                        <div>1. 以底图为目标，在上层图文件夹中找出与之匹配率最高的</div>
+                        <div>2. 若匹配结果不满意，可手动取消匹配，或手动拖动匹配</div>
+                        <div>3. 发送任务时，以带箭头的匹配结果为准</div>
+                    </el-collapse-item>
+                </el-collapse>
+                <div>
+                    <el-divider direction="horizontal">图源文件夹</el-divider>
+                    <div>要匹配哪些【底图】：</div>
+                    <el-input v-model="config.match_to_dir" size="small" style="width:360px;"
+                              type="textarea" :autosize="{ minRows: 3}" @blur="saveConfig">
+                    </el-input>
+                    <div>从哪里匹配【上层图】：</div>
+                    <el-input v-model="config.match_from_dir" size="small" style="width:360px;"
+                              type="textarea" :autosize="{ minRows: 3}" @blur="saveConfig">
+                    </el-input>
+                    <div>
+                        <span>寻找上层图时包含子目录：</span>
+                        <el-switch v-model="config.match_from_son" @change="saveConfig"></el-switch>
+                    </div>
+                    <el-divider direction="horizontal">匹配结果</el-divider>
+                    <el-input v-model.number="config.similar_threshold" step="0.01" type="number" size="small"
+                              style="width:200px;" @blur="saveConfig">
+                        <template slot="prepend">匹配阈值</template>
+                    </el-input>
+                    <div>
+                        <span>显示所有匹配率：</span>
+                        <el-switch v-model="displayAll" @change="saveConfig"></el-switch>
+                    </div>
+                    <el-divider direction="horizontal">图片显示</el-divider>
+                    <el-input v-model.number="config.imgMaxWidth" size="small" style="width:200px;"
+                              @blur="saveConfig">
+                        <template slot="prepend">图片宽度</template>
+                    </el-input>
+                    <br>
+                    <el-input v-model.number="config.imgMaxHeight" size="small" style="width:200px;"
+                              @blur="saveConfig">
+                        <template slot="prepend">图片高度</template>
+                    </el-input>
+                    <br>
+                    <br>
+                    <div style="display: flex; flex-direction: row-reverse;">
+                        <el-button type="primary" size="small" @click="startMatch" :disabled="btnDisable">
+                            开始匹配
+                        </el-button>
+                    </div>
+                </div>
+            </el-tab-pane>
+            <el-tab-pane label="自动重置">
+                <el-collapse>
+                    <el-collapse-item title="功能简介" name="1">
+                        <div>1. 为底图的气泡框生成MASK</div>
+                        <div>2. 使用PS或cv2(python)自动对齐图层</div>
+                        <div>3. 给上层图施加滤镜等操作</div>
+                        <div>4. 保存前执行PS自定义的动作</div>
+                        <div>5. 保存在底图文件夹下的auto_PSD目录</div>
+                    </el-collapse-item>
+                </el-collapse>
+                <div v-if="match_groups.length === 0">
+                    <el-result icon="info" title="请先进行【图片匹配】" subTitle=""></el-result>
+                </div>
+                <div v-else>
+                    <el-switch v-model="config.maskUseCPU" active-text="使用CPU生成MASK"
+                               @change="saveConfig"></el-switch>
+                    <br>
+                    <el-switch v-model="config.cv2Align" active-text="对齐图层使用cv2而不是ps"
+                               @change="saveConfig"></el-switch>
+                    <br>
+                    <el-input v-model.number="config.maskTempDir" size="small" style="width:360px;"
+                              placeholder="默认在temp_mask" @blur="saveConfig">
+                        <template slot="prepend">MASK临时存储文件夹</template>
+                    </el-input>
+                    <br>
+                    <el-switch v-model="config.autoGray" active-text="识别黑白图并转灰度"
+                               @change="saveConfig"></el-switch>
+                    <br>
+                    <el-switch v-model="config.colorLv" active-text="修改上层图片色阶"
+                               @change="saveConfig"></el-switch>
+                    <br>
+                    <div style="margin-left: 5px;" v-if="config.colorLv">
+                        <el-input v-model.number="config.colorLvBlack" size="small" style="width:150px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend">黑场</template>
+                        </el-input>
+                        <el-input v-model.number="config.colorLvWhite" size="small" style="width:150px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend">白场</template>
+                        </el-input>
+                        <el-input v-model.number="config.colorLvGray" step="0.1" type="number" size="small"
+                                  style="width:150px;" @blur="saveConfig">
+                            <template slot="prepend">灰场</template>
+                        </el-input>
+                        <br>
+                    </div>
+                    <el-switch v-model="config.blurFilter" active-text="上层图片表面模糊"
+                               @change="saveConfig"></el-switch>
+                    <br>
+                    <div v-if="config.blurFilter">
+                        <el-input v-model.number="config.blurFilterRadius" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">半径</template>
+                        </el-input>
+                        <el-input v-model.number="config.blurFilterThreshold" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">阈值</template>
+                        </el-input>
+                        <br>
+                    </div>
+                    <el-switch v-model="config.USMFilter" active-text="上层图片USM锐化"
+                               @change="saveConfig"></el-switch>
+                    <br>
+                    <div v-if="config.USMFilter">
+                        <el-input v-model.number="config.USMFilterQuantity" size="small" style="width:120px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend" style="padding: 0 5px;">数量</template>
+                        </el-input>
+                        <el-input v-model.number="config.USMFilterRadius" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">半径</template>
+                        </el-input>
+                        <el-input v-model.number="config.USMFilterThreshold" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">阈值</template>
+                        </el-input>
+                        <br>
+                    </div>
+                    <el-switch v-model="config.UseAction" active-text="保存前执行动作" @change="saveConfig"></el-switch>
+                    <div v-if="config.UseAction">
+                        <el-input v-model="config.UseActionGroup" size="small" style="width:150px;"
+                                  placeholder="动作所在分组" @blur="saveConfig">
+                        </el-input>
+                        <span>—</span>
+                        <el-input v-model="config.UseActionName" size="small" style="width:150px;"
+                                  placeholder="动作名" @blur="saveConfig">
+                        </el-input>
+                    </div>
+                    <br><br>
+                    <div style="display: flex; flex-direction: row-reverse;">
+                        <el-button type="primary" size="small" @click="startPS" :disabled="btnDisable">
+                            发送任务到PS
+                        </el-button>
+                    </div>
+                </div>
+            </el-tab-pane>
+            <el-tab-pane label="图片命名">
+                <el-collapse>
+                    <el-collapse-item title="功能简介" name="1">
+                        <div>1. 以底图文件名为标准，把上层图复制到目标文件夹，并重命名</div>
+                        <div>2. 底图只作为命名和排序标准使用</div>
+                        <div>3. 适用场景：将单话资源整理为单行本</div>
+                        <div>4. 保存在底图目录下的一个新的文件夹中（和底图文件夹名相同）</div>
+                    </el-collapse-item>
+                </el-collapse>
+                <div v-if="match_groups.length === 0">
+                    <el-result icon="info" title="请先进行【图片匹配】" subTitle=""></el-result>
+                </div>
+                <div v-else>
+                    <el-switch v-model="config.rename_copy" active-text="未匹配则保留底图" @change="saveConfig"></el-switch>
+                    <br>
+                    <br>
+                    <div style="display: flex; flex-direction: row-reverse;">
+                        <el-button type="primary" size="small" @click="startRename" :disabled="btnDisable">
+                            发送任务
+                        </el-button>
+                    </div>
+                </div>
+            </el-tab-pane>
+            <el-tab-pane label="贴图蒙版">
+                <el-collapse>
+                    <el-collapse-item title="功能简介" name="1">
+                        <div>1. 和【自动重置】差不多，但不生成气泡框MASK</div>
+                        <div>2. 适用场景：为部分打码的图片贴图</div>
+                    </el-collapse-item>
+                </el-collapse>
+                <div v-if="match_groups.length === 0">
+                    <el-result icon="info" title="请先进行【图片匹配】" subTitle=""></el-result>
+                </div>
+                <div v-else>
+                    <el-switch v-model="config.cv2Align" active-text="对齐图层使用cv2而不是ps"
+                               @change="saveConfig"></el-switch>
+                    <br>
+                    <el-input v-model.number="config.maskTempDir" size="small" style="width:360px;"
+                              placeholder="默认在temp_mask" @blur="saveConfig">
+                        <template slot="prepend">MASK临时存储文件夹</template>
+                    </el-input>
+                    <br>
+                    <el-switch v-model="config.autoGray" active-text="识别黑白图并转灰度" @change="saveConfig"></el-switch>
+                    <br>
+                    <el-switch v-model="config.colorLv" active-text="修改上层图片色阶" @change="saveConfig"></el-switch>
+                    <br>
+                    <div style="margin-left: 5px;" v-if="config.colorLv">
+                        <el-input v-model.number="config.colorLvBlack" size="small" style="width:150px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend">黑场</template>
+                        </el-input>
+                        <el-input v-model.number="config.colorLvWhite" size="small" style="width:150px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend">白场</template>
+                        </el-input>
+                        <el-input v-model.number="config.colorLvGray" step="0.1" type="number" size="small"
+                                  style="width:150px;" @blur="saveConfig">
+                            <template slot="prepend">灰场</template>
+                        </el-input>
+                        <br>
+                    </div>
+                    <el-switch v-model="config.blurFilter" active-text="上层图片表面模糊" @change="saveConfig"></el-switch>
+                    <br>
+                    <div v-if="config.blurFilter">
+                        <el-input v-model.number="config.blurFilterRadius" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">半径</template>
+                        </el-input>
+                        <el-input v-model.number="config.blurFilterThreshold" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">阈值</template>
+                        </el-input>
+                        <br>
+                    </div>
+                    <el-switch v-model="config.USMFilter" active-text="上层图片USM锐化" @change="saveConfig"></el-switch>
+                    <br>
+                    <div v-if="config.USMFilter">
+                        <el-input v-model.number="config.USMFilterQuantity" size="small" style="width:120px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend" style="padding: 0 5px;">数量</template>
+                        </el-input>
+                        <el-input v-model.number="config.USMFilterRadius" step="0.1" type="number"
+                                  size="small" style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">半径</template>
+                        </el-input>
+                        <el-input v-model.number="config.USMFilterThreshold" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">阈值</template>
+                        </el-input>
+                        <br>
+                    </div>
+                    <el-switch v-model="config.UseAction" active-text="保存前执行动作" @change="saveConfig"></el-switch>
+                    <div v-if="config.UseAction">
+                        <el-input v-model="config.UseActionGroup" size="small" style="width:150px;"
+                                  placeholder="动作所在分组" @blur="saveConfig">
+                        </el-input>
+                        <span>—</span>
+                        <el-input v-model="config.UseActionName" size="small" style="width:150px;"
+                                  placeholder="动作名" @blur="saveConfig">
+                        </el-input>
+                    </div>
+                    <br><br>
+                    <div style="display: flex; flex-direction: row-reverse;">
+                        <el-button type="primary" size="small" @click="startPS2" :disabled="btnDisable">
+                            发送任务到PS
+                        </el-button>
+                    </div>
+                </div>
+            </el-tab-pane>
+        </el-tabs>
     </div>
-    <div class="content-container">
-        <div v-if="match_groups.length > 0">
-            <div style="border-radius: 5px 5px 0 0; text-align: center; background-color: #98de87; font-size: 18px; padding: 2px 0;">
-                匹配结果
-                <span>{{match_groups_result.length}}</span>
-            </div>
+    <div style="width: 16px"></div>
+    <div v-if="match_groups.length > 0">
+        <div style="border-radius: 5px 5px 0 0; text-align: center; background-color: #98de87; font-size: 18px; padding: 2px 0;">
+            <span>匹配结果区</span>
+            <span>{{match_groups_result.length}}</span>
+        </div>
+        <div class="content-container">
             <div class="match-group-box" style="border: 1px solid #98de87;">
                 <div class="row-box" v-for="(item, index) in match_groups" :key="index"
                      v-if="item['matchRatio'] >= config.similar_threshold || displayAll">
@@ -41,7 +286,7 @@
                         <div class="img-name-box">{{item['raw']}}</div>
                         <div class="img-box"
                              :style="{width: config.imgMaxWidth + 'px', height: config.imgMaxHeight + 'px'}">
-                            <img :src="resolveImgUrl(item['raw'], match_to_dir)" alt="111" loading="lazy">
+                            <img :src="resolveImgUrl(item['rawPath'])" alt="111" loading="lazy">
                         </div>
                     </div>
                     <div style="width: 100px;">
@@ -60,40 +305,34 @@
                              @dragover.prevent="imageDragOver($event)"
                              @drop="imageDrop($event, index)">
                             <img v-if="item['match']" :alt="item['match']" loading="lazy"
-                                 :src="resolveImgUrl(item['match'], match_from_dir)">
+                                 :src="resolveImgUrl(item['matchPath'])">
                             <span v-else class="img-box-placeholder">?</span>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div v-if="match_from_list.length > 0" class="match-from-images">
+    </div>
+    <div v-if="match_from_list.length > 0">
+        <div class="match-from-images">
             <div style="border-radius: 5px 5px 0 0; text-align: center; background-color: #f1a57d; font-size: 18px; padding: 2px 0;">
-                手动匹配
+                <span>手动匹配</span>
+                <el-link type="primary" @click="match_from_listShow = !match_from_listShow">
+                    {{ match_from_listShow ? 'HIDE' : 'SHOW' }}
+                </el-link>
             </div>
-            <el-button type="primary" size="small" @click="match_from_listShow = !match_from_listShow">
-                {{ match_from_listShow ? '显示匹配源' : '隐藏匹配源' }}
-            </el-button>
             <div class="image-select-box" style="border: 1px solid #f1a57d;" v-if="match_from_listShow">
                 <div class="row-box" v-for="(item, index) in match_from_list" :key="index">
                     <div class="img-with-name">
-                        <div class="img-name-box">{{item}}</div>
+                        <div class="img-name-box">{{item['name']}}</div>
                         <div class="img-box"
                              :style="{width: config.imgMaxWidth + 'px', height: config.imgMaxHeight + 'px'}"
                              draggable="true"
                              @dragstart="imageDragStart($event, item)">
-                            <img :alt="item" loading="lazy" :src="resolveImgUrl(item, match_from_dir)">
+                            <img :alt="item['name']" loading="lazy" :src="resolveImgUrl(item['path'])">
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-        <div v-if="match_groups.length > 0" style="min-width: 200px; margin-left: 23px;">
-            <div style="border-radius: 5px 5px 0 0; text-align: center; background-color: #78b3ff; font-size: 18px; padding: 2px 0;">
-                执行任务
-            </div>
-            <div class="match-group-box" style="border: 1px solid #78b3ff; height: 600px; padding: 5px;">
-                <el-button type="primary" size="small" @click="startPS" :disabled="btnDisable">发送任务到PS</el-button>
             </div>
         </div>
     </div>
@@ -105,81 +344,7 @@
             top="10vh"
             width="600px">
         <el-divider content-position="left">图片匹配参数</el-divider>
-        <el-input v-model.number="configTemp.similar_threshold" step="0.01" type="number" size="small"
-                  style="width:200px;">
-            <template slot="prepend">匹配阈值</template>
-        </el-input>
-        <el-divider content-position="left">网页图片宽高</el-divider>
-        <el-input v-model.number="configTemp.imgMaxWidth" size="small" style="width:200px;">
-            <template slot="prepend">图片宽度</template>
-        </el-input>
-        <br>
-        <el-input v-model.number="configTemp.imgMaxHeight" size="small" style="width:200px;">
-            <template slot="prepend">图片高度</template>
-        </el-input>
         <el-divider content-position="left">PSD生成</el-divider>
-        <el-switch v-model="configTemp.maskUseCPU" active-text="使用CPU生成MASK"></el-switch>
-        <br>
-        <el-input v-model.number="configTemp.maskTempDir" size="small" style="width:500px;"
-                  placeholder="留空默认在temp_mask">
-            <template slot="prepend">MASK临时存储文件夹</template>
-        </el-input>
-        <br>
-        <el-switch v-model="configTemp.autoGray" active-text="识别黑白图并转灰度"></el-switch>
-        <br>
-        <el-switch v-model="configTemp.colorLv" active-text="修改上层图片色阶"></el-switch>
-        <br>
-        <div style="margin-left: 5px;" v-if="configTemp.colorLv">
-            <el-input v-model.number="configTemp.colorLvBlack" size="small" style="width:150px;">
-                <template slot="prepend">黑场</template>
-            </el-input>
-            <el-input v-model.number="configTemp.colorLvWhite" size="small" style="width:150px;">
-                <template slot="prepend">白场</template>
-            </el-input>
-            <el-input v-model.number="configTemp.colorLvGray" step="0.1" type="number" size="small"
-                      style="width:150px;">
-                <template slot="prepend">灰场</template>
-            </el-input>
-            <br>
-        </div>
-        <el-switch v-model="configTemp.blurFilter" active-text="上层图片表面模糊"></el-switch>
-        <br>
-        <div style="margin-left: 5px;" v-if="configTemp.blurFilter">
-            <el-input v-model.number="configTemp.blurFilterRadius" step="0.1" type="number" size="small"
-                      style="width:150px;">
-                <template slot="prepend">半径</template>
-            </el-input>
-            <el-input v-model.number="configTemp.blurFilterThreshold" step="0.1" type="number" size="small"
-                      style="width:150px;">
-                <template slot="prepend">阈值</template>
-            </el-input>
-            <br>
-        </div>
-        <el-switch v-model="configTemp.USMFilter" active-text="上层图片USM锐化"></el-switch>
-        <br>
-        <div style="margin-left: 5px;" v-if="configTemp.USMFilter">
-            <el-input v-model.number="configTemp.USMFilterQuantity" size="small" style="width:150px;">
-                <template slot="prepend">数量</template>
-            </el-input>
-            <el-input v-model.number="configTemp.USMFilterRadius" step="0.1" type="number" size="small"
-                      style="width:150px;">
-                <template slot="prepend">半径</template>
-            </el-input>
-            <el-input v-model.number="configTemp.USMFilterThreshold" step="0.1" type="number" size="small"
-                      style="width:150px;">
-                <template slot="prepend">阈值</template>
-            </el-input>
-            <br>
-        </div>
-        <el-switch v-model="configTemp.UseAction" active-text="保存前执行动作"></el-switch>
-        <div style="margin-left: 5px;" v-if="configTemp.UseAction">
-            <br>
-            <el-input v-model="configTemp.UseActionGroup" size="small" style="width:150px;" placeholder="动作所在分组">
-            </el-input>
-            <span>—</span>
-            <el-input v-model="configTemp.UseActionName" size="small" style="width:150px;" placeholder="动作名">
-            </el-input>
-        </div>
         <span slot="footer" class="dialog-footer">
             <el-button type="primary" @click="configDialogOk()" size="small">确 定</el-button>
         </span>

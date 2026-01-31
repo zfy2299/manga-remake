@@ -13,10 +13,12 @@ new Vue({
     config: {
       match_to_dir: 'F:\\JHenTai_data\\single_Pic\\为什么老师会在这里\\12_work',
       match_from_dir: 'F:\\JHenTai_data\\single_Pic\\为什么老师会在这里\\12_work\\111\\汉化',
+      match_from_son: false,
       imgMaxWidth: 200,
       imgMaxHeight: 280,
       similar_threshold: 0.5,
       maskUseCPU: true,
+      cv2Align: true,
       maskTempDir: '',
       autoGray: true,
       colorLv: false,
@@ -33,14 +35,15 @@ new Vue({
       UseAction: false,
       UseActionGroup: '',
       UseActionName: '',
+      rename_copy: true,
     },
     configTemp: {},
     draggedItem: null,
     btnDisable: false,
   }),
   methods: {
-    resolveImgUrl(name, path) {
-      return `/images/${this.config.imgMaxWidth}x${this.config.imgMaxHeight}/${path}\\${name}`
+    resolveImgUrl(path) {
+      return `/images/${this.config.imgMaxWidth}x${this.config.imgMaxHeight}/${path}`
     },
     myRequest(url, data) {
       return fetch(url, {
@@ -50,15 +53,16 @@ new Vue({
         },
         body: JSON.stringify(data)
       }).then(res => {
+        if (!res.ok) {
+          throw new Error('服务器返回异常状态码：' + res.status);
+        }
         return res.json()
       }).then(res => {
         if (res.code !== 200) {
-          throw res['msg']
+          throw new Error(res['msg'])
         } else {
           return res['data']
         }
-      }).catch(err => {
-        alert(err)
       })
     },
     imageDragStart(event, item) {
@@ -72,21 +76,21 @@ new Vue({
     imageDrop(event, idx) {
       event.stopPropagation()
       if (this.draggedItem) {
-        this.$set(this.match_groups[idx], 'match', this.draggedItem)
+        this.$set(this.match_groups[idx], 'match', this.draggedItem['name'])
+        this.$set(this.match_groups[idx], 'matchPath', this.draggedItem['path'])
         this.$set(this.match_groups[idx], 'matchRatio', 1)
         this.draggedItem = null
       }
     },
     clearMatch(idx) {
       this.$set(this.match_groups[idx], 'match', '')
-      this.$set(this.match_groups[idx], 'matchRatio', 1)
+      this.$set(this.match_groups[idx], 'matchPath', '')
+      this.$set(this.match_groups[idx], 'matchRatio', 0)
     },
     configDialogOpen() {
       this.configTemp = {...this.config}
     },
-    configDialogOk() {
-      this.config = {...this.configTemp}
-      this.configDialogShow = false
+    saveConfig() {
       localStorage.setItem('auto-ps-config', JSON.stringify(this.config))
     },
     startMatch() {
@@ -96,7 +100,8 @@ new Vue({
         this.match_to_dirNum = res['match_from_num']
         this.match_from_dirNum = res['match_dir_num']
         this.match_from_list = res['match_from_list']
-        localStorage.setItem('auto-ps-config', JSON.stringify(this.config))
+      }).catch(err => {
+        alert(err)
       }).finally(_ => {
         this.btnDisable = false
       })
@@ -104,20 +109,18 @@ new Vue({
       this.match_from_dir = this.config['match_from_dir']
     },
     startPS() {
-      if (this.match_to_dir !== this.config.match_to_dir || this.match_from_dir !== this.config.match_from_dir) {
-        window.ELEMENT.Message({
-          message: '当前显示的匹配结果和填入的路径不一致，无法继续！',
+      if(this.match_groups_result.length === 0) {
+        return window.ELEMENT.Message({
+          message: '当前任务列表为空',
           type: 'warning',
           showClose: true,
           duration: 4000
         })
-        return
       }
       this.btnDisable = true
       this.myRequest('/api/start_ps', {
         match_list: this.match_groups_result,
-        config: this.config,
-        task_id: `${this.config.match_to_dir}:${this.config.match_from_dir}`
+        config: this.config
       }).then(_ => {
         window.ELEMENT.Message({
           message: '任务下发成功，本页面不会提示任务进度！',
@@ -125,10 +128,67 @@ new Vue({
           showClose: true,
           duration: 4000
         })
+        return 1
+      }).catch(err => {
+        alert(err.message || err)
       }).finally(_ => {
         this.btnDisable = false
       })
-    }
+    },
+    startRename() {
+      if(this.match_groups_result.length === 0) {
+        return window.ELEMENT.Message({
+          message: '当前任务列表为空',
+          type: 'warning',
+          showClose: true,
+          duration: 4000
+        })
+      }
+      this.btnDisable = true
+      this.myRequest('/api/start_rename', {
+        match_list: this.match_groups_result,
+        config: this.config
+      }).then(_ => {
+        return window.ELEMENT.Message({
+          message: '成功！',
+          type: 'success',
+          showClose: true,
+          duration: 4000
+        })
+      }).catch(err => {
+        alert(err.message || err)
+      }).finally(_ => {
+        this.btnDisable = false
+      })
+    },
+    startPS2() {
+      if(this.match_groups_result.length === 0) {
+        return window.ELEMENT.Message({
+          message: '当前任务列表为空',
+          type: 'warning',
+          showClose: true,
+          duration: 4000
+        })
+      }
+      this.btnDisable = true
+      this.myRequest('/api/start_ps', {
+        match_list: this.match_groups_result,
+        config: this.config,
+        no_mask: true
+      }).then(_ => {
+        window.ELEMENT.Message({
+          message: '任务下发成功，本页面不会提示任务进度！',
+          type: 'success',
+          showClose: true,
+          duration: 4000
+        })
+        return 1
+      }).catch(err => {
+        alert(err.message || err)
+      }).finally(_ => {
+        this.btnDisable = false
+      })
+    },
   },
   computed: {
     match_groups_result() {

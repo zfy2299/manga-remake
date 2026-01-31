@@ -8,3 +8,5 @@ web/.idea
 weight/*
 /manga-remake-dataset.7z
 /start.bat
+/updateLog.txt
+/temp_align/

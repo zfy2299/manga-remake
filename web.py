@@ -1,6 +1,8 @@
 import io
 import os
+import shutil
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import torch
 from PIL import Image
@@ -17,6 +19,7 @@ app = Flask(__name__, static_folder='web/asset')
 
 executor = ThreadPoolExecutor(max_workers=1)
 task_ids = []
+image_extensions = [".jpg", ".jpeg", ".webp", ".png", ".bmp", '.avif']
 
 
 @app.route('/')
@@ -32,6 +35,8 @@ def serve_compress_img(filepath, max_size):
         return "图片不存在", 404
     max_temp = max_size.split('x')
     with Image.open(filepath) as img:
+        if img.mode == 'P':
+            img = img.convert('RGBA', dither=None)
         img.thumbnail((int(max_temp[0]), int(max_temp[1])), Image.Resampling.LANCZOS)
         img_byte = io.BytesIO()
         img.save(img_byte, format='webp', quality=75, optimize=True)
@@ -44,13 +49,13 @@ def img_match():
     data = request.get_json(force=True)
     match_from_dir = data.get("match_from_dir", '未知路径')
     match_to_dir = data.get("match_to_dir", '未知路径')
-    similar_threshold = data.get("similar_threshold", 0.8)
+    match_from_son = data.get("match_from_son", False)
     if not os.path.exists(match_to_dir) or not os.path.exists(match_from_dir):
         return {
             'code': 400,
             'msg': "路径不存在"
         }
-    split_image(match_from_dir)
+    split_image(match_from_dir, match_from_son)
     # final_result = match_comics(
     #     match_to_dir, match_from_dir,
     #     similarity_threshold=similar_threshold,
@@ -59,32 +64,34 @@ def img_match():
     #     use_align=True
     # )
     final_result = match_comics_2(
-        match_to_dir, match_from_dir, threshold=similar_threshold,
+        match_to_dir, match_from_dir, match_from_son=match_from_son
     )
+    r_ = '**/*' if match_from_son else '*'
     return {
         'code': 200,
         'data': {
             'match_result': final_result['match_result'],
             'match_from_num': final_result['a_num'],
             'match_dir_num': final_result['b_num'],
-            'match_from_list': [f for f in os.listdir(match_from_dir) if
-                                any(f.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".webp", ".png", ".bmp"])]
+            'match_from_list': [
+                {
+                    "name": img_path.name,
+                    "path": str(img_path)
+                }
+                for img_path in Path(match_from_dir).glob(r_)
+                if img_path.is_file() and img_path.suffix.lower() in image_extensions
+            ]
         }
     }
 
 
-def start_ps_task(param):
-    match_list = param['match_list']
-    task_list = {}
-    for item in match_list:
-        task_list[item['raw']] = item['match']
+def start_ps_task(param, task_id):
+    task_list = param['match_list']
     if not task_list:
         print('任务队列为空')
         return
     config = param['config']
-    if not os.path.exists(config['match_to_dir']):
-        print(f"路径不存在：{config['match_to_dir']}")
-        return
+    no_mask = param['no_mask']
     if not os.path.exists(config['match_from_dir']):
         print(f"路径不存在：{config['match_from_dir']}")
         return
@@ -121,37 +128,73 @@ def start_ps_task(param):
         do_action = [config['UseActionGroup'], config['UseActionName']]
     else:
         do_action = None
-    os.makedirs(os.path.join(config['match_to_dir'], 'auto_PSD'), exist_ok=True)
-    print(f'启动队列：{config["match_to_dir"]}')
+    if config['cv2Align']:
+        cv2_align = config['cv2Align']
+    print(f'启动队列：{task_id}')
     pythoncom.CoInitialize()
-    for bottom_img_name, up_img_name in task_list.items():
-        bottom_img_path = os.path.join(config['match_to_dir'], bottom_img_name)
-        up_img_path = os.path.join(config['match_from_dir'], up_img_name)
-        file_name, ext = os.path.splitext(bottom_img_name)
-        save_psd_path = os.path.join(config['match_to_dir'], 'auto_PSD', file_name)
-        ps_auto_composite_layers(bottom_img_path, up_img_path, infer_single_image(
-            bottom_img_path, model, save_dir=temp_mask_dir, device=device),
+    for item in task_list:
+        bottom_img_path = item['rawPath']
+        up_img_path = item['matchPath']
+        if not os.path.exists(bottom_img_path):
+            print(f"路径不存在：{bottom_img_path}")
+        if not os.path.exists(up_img_path):
+            print(f"路径不存在：{up_img_path}")
+        save_psd_path = os.path.join(os.path.dirname(bottom_img_path), 'auto_PSD', item['raw'])
+        os.makedirs(os.path.dirname(save_psd_path), exist_ok=True)
+        if no_mask:
+            mask_path = None
+        else:
+            mask_path = infer_single_image(bottom_img_path, model, save_dir=temp_mask_dir, device=device)
+        ps_auto_composite_layers(bottom_img_path, up_img_path, mask_path,
                                  color_level=color_level,
                                  filter_blur=filter_blur,
+                                 cv2_align=cv2_align,
                                  filter_sharp=filter_sharp,
                                  do_action=do_action,
                                  auto_gray=config['autoGray'], save_psd_path=save_psd_path)
         # print(f"PSD已保存：{save_psd_path}")
     pythoncom.CoUninitialize()
     print(f"队列已完成...")
-    task_ids.remove(param['task_id'])
+    task_ids.remove(task_id)
 
 
 @app.route('/api/start_ps', methods=['POST'])
 def start_ps():
     data = request.get_json(force=True)
-    if data['task_id'] in task_ids:
+    p1 = os.path.dirname(data['match_list'][0]['matchPath'])
+    p2 = os.path.dirname(data['match_list'][0]['rawPath'])
+    task_id = f"{p1}:{p2}"
+    if task_id in task_ids:
         return {
             'code': 400,
             'msg': '此任务正在执行！'
         }
-    task_ids.append(data['task_id'])
-    executor.submit(start_ps_task, data)
+    task_ids.append(task_id)
+    executor.submit(start_ps_task, data, task_id)
+    return {
+        'code': 200
+    }
+
+
+@app.route('/api/start_rename', methods=['POST'])
+def start_rename():
+    data = request.get_json(force=True)
+    rename_copy = data['config']['rename_copy']
+    match_list = data['match_list']
+    raw_path = os.path.dirname(data['match_list'][0]['rawPath'])
+    save_path = os.path.join(raw_path, os.path.basename(raw_path))
+    os.makedirs(save_path, exist_ok=True)
+    raw_list = os.listdir(raw_path)
+    over_list = []
+    for item in match_list:
+        shutil.copy2(item['matchPath'], os.path.join(save_path, item['raw']))
+        over_list.append(item['raw'])
+    if rename_copy:
+        for item in raw_list:
+            img_path = Path(os.path.join(raw_path, item))
+            if item in over_list or img_path.is_dir() or img_path.suffix.lower() not in image_extensions:
+                continue
+            shutil.copy2(img_path, os.path.join(save_path, item))
     return {
         'code': 200
     }
