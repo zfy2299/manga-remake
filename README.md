@@ -30,6 +30,7 @@ python web.py
 
 
 ### 使用步骤
+0. 可观看此简易教程：[Tutorial.mp4](README_img/Tutorial.mp4) （观看者限18岁以上）
 1. 运行后，使用Edge或Chrome浏览器访问：http://127.0.0.1:5000
 2. 输入文件夹路径
 3. 点击`开始匹配`按钮，等待匹配结果
