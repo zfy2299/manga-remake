@@ -86,76 +86,82 @@ def img_match():
 
 
 def start_ps_task(param, task_id):
-    task_list = param['match_list']
-    if not task_list:
-        print('任务队列为空')
-        return
-    config = param['config']
-    no_mask = param['no_mask']
-    if not os.path.exists(config['match_from_dir']):
-        print(f"路径不存在：{config['match_from_dir']}")
-        return
-    models = os.listdir('weight')
-    if len(models) == 0:
-        print(f"weight目录下未找到模型文件")
-        exit()
-    use_model = os.path.join('weight', models[-1])
-    if config['maskUseCPU']:
-        device = torch.device("cpu")
-    else:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ResNetUNet(n_channels=3, n_classes=1, local_model=True)
-    model.load_state_dict(torch.load(use_model, weights_only=True))
-    model.to(device)
-    temp_mask_dir = 'temp_mask'
-    if config['maskTempDir']:
-        temp_mask_dir = config['maskTempDir']
-    os.makedirs(temp_mask_dir, exist_ok=True)
-    if config['colorLv']:
-        color_level = {'black': config['colorLvBlack'], 'white': config['colorLvWhite'], 'gray': config['colorLvGray']}
-    else:
-        color_level = None
-    if config['blurFilter']:
-        filter_blur = {'radius': config['blurFilterRadius'], 'threshold': config['blurFilterThreshold']}
-    else:
-        filter_blur = None
-    if config['USMFilter']:
-        filter_sharp = {'quantity': config['USMFilterQuantity'], 'radius': config['USMFilterRadius'],
-                        'threshold': config['USMFilterThreshold']}
-    else:
-        filter_sharp = None
-    if config['UseAction']:
-        do_action = [config['UseActionGroup'], config['UseActionName']]
-    else:
-        do_action = None
-    if config['cv2Align']:
-        cv2_align = config['cv2Align']
-    print(f'启动队列：{task_id}')
-    pythoncom.CoInitialize()
-    for item in task_list:
-        bottom_img_path = item['rawPath']
-        up_img_path = item['matchPath']
-        if not os.path.exists(bottom_img_path):
-            print(f"路径不存在：{bottom_img_path}")
-        if not os.path.exists(up_img_path):
-            print(f"路径不存在：{up_img_path}")
-        save_psd_path = os.path.join(os.path.dirname(bottom_img_path), 'auto_PSD', item['raw'])
-        os.makedirs(os.path.dirname(save_psd_path), exist_ok=True)
-        if no_mask:
-            mask_path = None
+    try:
+        task_list = param['match_list']
+        if not task_list:
+            print('任务队列为空')
+            return
+        config = param['config']
+        if 'no_mask' in param:
+            no_mask = param['no_mask']
         else:
-            mask_path = infer_single_image(bottom_img_path, model, save_dir=temp_mask_dir, device=device)
-        ps_auto_composite_layers(bottom_img_path, up_img_path, mask_path,
-                                 color_level=color_level,
-                                 filter_blur=filter_blur,
-                                 cv2_align=cv2_align,
-                                 filter_sharp=filter_sharp,
-                                 do_action=do_action,
-                                 auto_gray=config['autoGray'], save_psd_path=save_psd_path)
-        # print(f"PSD已保存：{save_psd_path}")
-    pythoncom.CoUninitialize()
-    print(f"队列已完成...")
-    task_ids.remove(task_id)
+            no_mask = False
+        models = os.listdir('weight')
+        if len(models) == 0:
+            print(f"weight目录下未找到模型文件")
+            return
+        use_model = os.path.join('weight', models[-1])
+        if config['maskUseCPU']:
+            device = torch.device("cpu")
+        else:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = ResNetUNet(n_channels=3, n_classes=1, local_model=True)
+        model.load_state_dict(torch.load(use_model, weights_only=True))
+        model.to(device)
+        temp_mask_dir = 'temp_mask'
+        if config['maskTempDir']:
+            temp_mask_dir = config['maskTempDir']
+        os.makedirs(temp_mask_dir, exist_ok=True)
+        if config['colorLv']:
+            color_level = {'black': config['colorLvBlack'], 'white': config['colorLvWhite'],
+                           'gray': config['colorLvGray']}
+        else:
+            color_level = None
+        if config['blurFilter']:
+            filter_blur = {'radius': config['blurFilterRadius'], 'threshold': config['blurFilterThreshold']}
+        else:
+            filter_blur = None
+        if config['USMFilter']:
+            filter_sharp = {'quantity': config['USMFilterQuantity'], 'radius': config['USMFilterRadius'],
+                            'threshold': config['USMFilterThreshold']}
+        else:
+            filter_sharp = None
+        if config['UseAction']:
+            do_action = [config['UseActionGroup'], config['UseActionName']]
+        else:
+            do_action = None
+        if config['cv2Align']:
+            cv2_align = config['cv2Align']
+        print(f'启动队列：{task_id}')
+        pythoncom.CoInitialize()
+        for item in task_list:
+            bottom_img_path = item['rawPath']
+            up_img_path = item['matchPath']
+            if not os.path.exists(bottom_img_path):
+                print(f"路径不存在：{bottom_img_path}")
+            if not os.path.exists(up_img_path):
+                print(f"路径不存在：{up_img_path}")
+            save_psd_path = os.path.join(os.path.dirname(bottom_img_path), 'auto_PSD', item['raw'])
+            os.makedirs(os.path.dirname(save_psd_path), exist_ok=True)
+            if no_mask:
+                mask_path = None
+            else:
+                mask_path = infer_single_image(bottom_img_path, model, save_dir=temp_mask_dir, device=device)
+            ps_auto_composite_layers(bottom_img_path, up_img_path, mask_path,
+                                     color_level=color_level,
+                                     filter_blur=filter_blur,
+                                     cv2_align=cv2_align,
+                                     filter_sharp=filter_sharp,
+                                     do_action=do_action,
+                                     auto_gray=config['autoGray'], save_psd_path=save_psd_path)
+            # print(f"PSD已保存：{save_psd_path}")
+        pythoncom.CoUninitialize()
+        print(f"队列已完成...")
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        task_ids.remove(task_id)
 
 
 @app.route('/api/start_ps', methods=['POST'])
