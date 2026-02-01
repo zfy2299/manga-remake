@@ -48,6 +48,7 @@
     align-items: center;
     height: calc(100vh - 68px);
 }
+
 .img-name-box {
     background-color: #e8b692;
     text-align: center;
@@ -88,4 +89,26 @@
 
 .el-input-group__append, .el-input-group__prepend {
     padding: 0 10px !important;
+}
+
+.choose-images-box {
+    display: flex;
+    flex-wrap: wrap;
+    height: 60vh;
+    overflow-y: auto;
+    justify-content: space-around;
+}
+
+.choose-images {
+    border: 1px solid #000;
+    border-radius: 5px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.choose-img {
+    background-color: #a1d556;
 }

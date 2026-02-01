@@ -8,7 +8,7 @@ new Vue({
     match_to_dirNum: 0,
     match_from_dirNum: 0,
     match_from_list: [],
-    configDialogShow: false,
+    chooseOneDialogShow: false,
     match_from_listShow: false,
     config: {
       match_to_dir: 'F:\\JHenTai_data\\single_Pic\\为什么老师会在这里\\12_work',
@@ -40,6 +40,7 @@ new Vue({
     configTemp: {},
     draggedItem: null,
     btnDisable: false,
+    chooseOne: {},
   }),
   methods: {
     resolveImgUrl(path) {
@@ -86,9 +87,6 @@ new Vue({
       this.$set(this.match_groups[idx], 'match', '')
       this.$set(this.match_groups[idx], 'matchPath', '')
       this.$set(this.match_groups[idx], 'matchRatio', 0)
-    },
-    configDialogOpen() {
-      this.configTemp = {...this.config}
     },
     saveConfig() {
       localStorage.setItem('auto-ps-config', JSON.stringify(this.config))
@@ -189,6 +187,36 @@ new Vue({
         this.btnDisable = false
       })
     },
+    startPS3() {
+      if(Object.keys(this.chooseOne).length === 0) {
+        return window.ELEMENT.Message({
+          message: '请选择一张图！',
+          type: 'warning',
+          showClose: true,
+          duration: 4000
+        })
+      }
+      this.btnDisable = true
+      this.myRequest('/api/start_ps', {
+        match_list: [this.chooseOne],
+        config: this.config
+      }).then(_ => {
+        window.ELEMENT.Message({
+          message: '任务下发成功，本页面不会提示任务进度！',
+          type: 'success',
+          showClose: true,
+          duration: 4000
+        })
+        return 1
+      }).catch(err => {
+        alert(err.message || err)
+      }).finally(_ => {
+        this.btnDisable = false
+      })
+    },
+    chooseOneClick(data) {
+      this.chooseOne = {...data}
+    }
   },
   computed: {
     match_groups_result() {
