@@ -168,7 +168,8 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
     bg_layer = doc.artLayers[0]
     bg_layer.name = "背景图层"
     # ========== 灰度图判定 ==========
-    if auto_gray and doc.channels.length > 1 and isGrayMap(Image.open(bg_img_path)):
+    is_gray = isGrayMap(Image.open(bg_img_path))
+    if auto_gray and doc.channels.length > 1 and is_gray:
         app.doJavaScript("app.activeDocument.changeMode(ChangeMode.GRAYSCALE);")
     # 导入图层并对齐
     if cv2_align:
@@ -186,7 +187,7 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
         app.doJavaScript(stdlib_js)
     bg_layer.isBackgroundLayer = True
     # 色阶
-    if color_level:
+    if color_level and auto_gray and is_gray:
         app.doJavaScript(f"""
             var desc284 = new ActionDescriptor();
             var idpresetKind = stringIDToTypeID( "presetKind" );
