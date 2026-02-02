@@ -172,8 +172,11 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
     if auto_gray and doc.channels.length > 1 and is_gray:
         app.doJavaScript("app.activeDocument.changeMode(ChangeMode.GRAYSCALE);")
     # 导入图层并对齐
+    align_res = None
     if cv2_align:
-        top_img_path = align_images(bg_img_path, top_img_path)
+        align_res = align_images(bg_img_path, top_img_path)
+        if align_res is not None:
+            top_img_path = align_res
     with Session() as ps_:
         desc = ps_.ActionDescriptor
         desc.putPath(ps_.app.charIDToTypeID("null"), top_img_path)
@@ -181,9 +184,10 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
     doc.activeLayer.rasterize(5)
     up_layer = doc.artLayers[0]
     up_layer.name = "上层图层"
-    if not cv2_align:
+    if align_res is not None or not cv2_align:
         stdlib_js = open('stdlib.js', encoding='utf-8').read()
-        stdlib_js += "Stdlib.loadSelection(doc, doc.artLayers.getByName('背景图层'), 'Trsp');Stdlib.crop(doc);"
+        stdlib_js += "Stdlib.loadSelection(doc, doc.artLayers.getByName('背景图层'), 'Trsp');Stdlib.crop(" \
+                     "doc);app.activeDocument.selection.deselect(); "
         app.doJavaScript(stdlib_js)
     bg_layer.isBackgroundLayer = True
     # 色阶
@@ -275,7 +279,7 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
             var idClr = charIDToTypeID( "Clr " );
             desc226.putEnumerated( charIDToTypeID( "Usng" ), charIDToTypeID( "FlCn" ), idClr );
             var desc227 = new ActionDescriptor();
-            desc227.putUnitDouble( charIDToTypeID( "H   " ), charIDToTypeID( "#Ang" ), 299.992676 );
+            desc227.putUnitDouble( charIDToTypeID( "H   " ), charIDToTypeID( "#Ang" ), 300 );
             desc227.putDouble( charIDToTypeID( "Strt" ), 0.000000 );
             desc227.putDouble( charIDToTypeID( "Brgh" ), 0.000000 );
             desc226.putObject( idClr, charIDToTypeID( "HSBC" ), desc227 );
@@ -515,8 +519,8 @@ if __name__ == "__main__":
     # print(isGrayMap(test_img_gray, debug=True))
 
     # 测试：使图片B向图片A对齐
-    aligned_path_white = align_images(ref_path=r"F:\[赤城あさひと] 反り (あま❤ナマ)\09_01.png",
-                                      img_path=r"F:\[赤城あさひと] 反り (あま❤ナマ)\汉化\STARS_18057_132.jpg", )
+    aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\待翻新\[フグタ家] ぼくの彼女 [中国翻訳] [無修正]\_008.jpg",
+                                      img_path=r"F:\JHenTai_data\待翻新\[フグタ家] ぼくの彼女 [中国翻訳] [無修正]\EN\008.jpg", )
     if aligned_path_white:
         print(f"成功生成：{aligned_path_white}")
     else:

@@ -159,7 +159,7 @@ new Vue({
         this.btnDisable = false
       })
     },
-    startPS2() {
+    startPS2(no_mask=true) {
       if(this.match_groups_result.length === 0) {
         return window.ELEMENT.Message({
           message: '当前任务列表为空',
@@ -172,7 +172,7 @@ new Vue({
       this.myRequest('/api/start_ps', {
         match_list: this.match_groups_result,
         config: this.config,
-        no_mask: true
+        no_mask: no_mask
       }).then(_ => {
         window.ELEMENT.Message({
           message: '任务下发成功，本页面不会提示任务进度！',
@@ -199,7 +199,8 @@ new Vue({
       this.btnDisable = true
       this.myRequest('/api/start_ps', {
         match_list: [this.chooseOne],
-        config: this.config
+        config: this.config,
+        no_mask: this.$refs.optionTabs.$data.currentName !== '1'
       }).then(_ => {
         window.ELEMENT.Message({
           message: '任务下发成功，本页面不会提示任务进度！',

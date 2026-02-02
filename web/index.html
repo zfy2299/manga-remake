@@ -14,7 +14,7 @@
         <div style="border-radius: 5px 5px 0 0; text-align: center; background-color: #fbe2d1; font-size: 18px; padding: 2px 0;">
             功能区
         </div>
-        <el-tabs :tab-position="'left'" style="height: 800px;">
+        <el-tabs :tab-position="'left'" style="height: 800px;" ref="optionTabs">
             <el-tab-pane label="图片匹配">
                 <el-collapse>
                     <el-collapse-item title="功能简介" name="1">
@@ -271,6 +271,10 @@
                         <el-button type="primary" size="small" @click="startPS2" :disabled="btnDisable">
                             发送任务到PS
                         </el-button>
+                        <el-button type="warning" size="small" @click="chooseOneDialogShow = true"
+                                   :disabled="btnDisable" style="margin-right: 10px;">
+                            选一张试试
+                        </el-button>
                     </div>
                 </div>
             </el-tab-pane>
@@ -296,9 +300,11 @@
                     <div style="width: 100px;">
                         <div v-if="item['match']" style="width: 100px;">
                             <div class="match-ratio-num">{{item['matchRatio'].toFixed(4)}}</div>
-                            <img src="asset/arrow.png" alt="arrow">
-                            <div style="width: 100%; display: flex; flex-direction: row-reverse;">
-                                <el-button type="danger" size="mini" @click="clearMatch(index)">取消</el-button>
+                            <div v-if="item['matchRatio'] >= config.similar_threshold">
+                                <img src="asset/arrow.png" alt="arrow">
+                                <div style="width: 100%; display: flex; flex-direction: row-reverse;">
+                                    <el-button type="danger" size="mini" @click="clearMatch(index)">取消</el-button>
+                                </div>
                             </div>
                         </div>
                     </div>
