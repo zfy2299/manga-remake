@@ -7,6 +7,7 @@ import shutil
 import numpy as np
 from PIL import Image
 import pillow_avif
+from skimage import exposure
 from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
@@ -132,9 +133,13 @@ def run_test(weight_path, test_out_dir, batch_size=12):
 
 
 def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_path, auto_gray=False, cv2_align=True,
-                             color_level=None, filter_blur=None, filter_sharp=None, do_action=None):
+                             color_align=True, color_level=None, filter_blur=None, filter_sharp=None,
+                             selection_contract=0, selection_feather=0, do_action=None):
     """
 
+    :param selection_feather:
+    :param selection_contract:
+    :param color_align:
     :param cv2_align:
     :param bg_img_path:
     :param top_img_path:
@@ -177,6 +182,10 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
         align_res = align_images(bg_img_path, top_img_path)
         if align_res is not None:
             top_img_path = align_res
+    if color_align:
+        temp_align_res = align_image_color_v2(top_img_path, bg_img_path)
+        if temp_align_res:
+            top_img_path = temp_align_res
     with Session() as ps_:
         desc = ps_.ActionDescriptor
         desc.putPath(ps_.app.charIDToTypeID("null"), top_img_path)
@@ -190,6 +199,14 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
                      "doc);app.activeDocument.selection.deselect(); "
         app.doJavaScript(stdlib_js)
     bg_layer.isBackgroundLayer = True
+    # 表面模糊
+    if filter_blur:
+        app.doJavaScript(f"""
+            var desc227 = new ActionDescriptor();
+            desc227.putUnitDouble(charIDToTypeID("Rds "), charIDToTypeID("#Pxl"), {filter_blur['radius']});
+            desc227.putInteger(charIDToTypeID("Thsh"), {filter_blur['threshold']} );
+            executeAction(stringIDToTypeID("surfaceBlur"), desc227, DialogModes.NO );
+        """)
     # 色阶
     if color_level and auto_gray and is_gray:
         app.doJavaScript(f"""
@@ -213,14 +230,6 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
             list4.putObject( charIDToTypeID( "LvlA" ), desc285 );
             desc284.putList( charIDToTypeID( "Adjs" ), list4 );
             executeAction( charIDToTypeID( "Lvls" ), desc284, DialogModes.NO );
-        """)
-    # 表面模糊
-    if filter_blur:
-        app.doJavaScript(f"""
-            var desc227 = new ActionDescriptor();
-            desc227.putUnitDouble(charIDToTypeID("Rds "), charIDToTypeID("#Pxl"), {filter_blur['radius']});
-            desc227.putInteger(charIDToTypeID("Thsh"), {filter_blur['threshold']} );
-            executeAction(stringIDToTypeID("surfaceBlur"), desc227, DialogModes.NO );
         """)
     # USM锐化
     if filter_sharp:
@@ -252,6 +261,15 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
             executeAction(stringIDToTypeID("colorRange"), desc, DialogModes.NO);
         """)
         mask_layer.visible = False
+        try:
+            selection = app.activeDocument.selection
+            t_ = selection.bounds
+            if selection_contract:
+                selection.contract(selection_contract)  # 收缩选区
+            if selection_feather:
+                selection.feather(selection_feather)  # 羽化
+        except:
+            pass
     doc.activeLayer = up_layer
     # 将选区应用为蒙版
     app.doJavaScript(r"""
@@ -513,15 +531,111 @@ def align_images(
     return os.path.abspath(os.path.normpath(output_path))
 
 
+def align_image_color(source_path, reference_path, output_dir="temp_align", ):
+    """
+    将 source 图像的色彩/色调对齐到 reference 图像。
+
+    :param source_path: 待转换的图像路径
+    :param reference_path: 参考的标准图像路径
+    :param output_dir:
+    """
+    # 1. 加载图像
+    # 对于黑白漫画，建议直接以灰度模式加载，效果最稳定
+    src_img = cv2.imread(source_path, cv2.IMREAD_GRAYSCALE)
+    ref_img = cv2.imread(reference_path, cv2.IMREAD_GRAYSCALE)
+
+    if src_img is None or ref_img is None:
+        print("错误：请检查路径，无法读取图片。")
+        return
+
+    # 2. 直方图匹配 (Histogram Matching)
+    # 这步是核心：它会将 src 的像素分布映射得跟 ref 一模一样
+    matched = exposure.match_histograms(src_img, ref_img)
+
+    # 3. 转换为 8-bit 无符号整型（防止 skimage 输出 float）
+    matched = matched.astype(np.uint8)
+
+    # 4. (可选) 细节微调：如果需要极致的蒙版效果，可以确保背景是纯白
+    # 比如将 250 以上的像素全部强制转为 255
+    # _, matched = cv2.threshold(matched, 250, 255, cv2.THRESH_TRUNC)
+    output_path = os.path.join(output_dir, os.path.splitext(os.path.basename(source_path))[0] + '_colored.png')
+    # 5. 保存结果
+    cv2.imwrite(output_path, matched)
+    return output_path
+
+
+def align_image_color_v2(source_path, reference_path, output_dir="temp_align"):
+    """
+    兼容彩色和黑白漫画的色彩/亮度对齐函数
+    """
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # 1. 加载原图 (不指定灰度，保留原始通道)
+    src_img = cv2.imread(source_path)
+    ref_img = cv2.imread(reference_path)
+
+    if src_img is None or ref_img is None:
+        print("错误：无法读取图片。")
+        return None
+
+    # 2. 判断是否需要彩色处理
+    # 如果图片本身是 3 通道的且不是纯灰度，则进入彩色模式
+    is_gray = isGrayMap(Image.open(source_path))
+
+    if not is_gray:
+        # --- 彩色模式：使用 LAB 空间防止色偏 ---
+        # 将 BGR 转换为 LAB
+        src_lab = cv2.cvtColor(src_img, cv2.COLOR_BGR2LAB)
+        ref_lab = cv2.cvtColor(ref_img, cv2.COLOR_BGR2LAB)
+
+        # 对三个通道分别进行直方图匹配
+        # L: 亮度, A: 绿-红, B: 蓝-黄
+        matched_lab = np.zeros_like(src_lab)
+        for i in range(3):
+            matched_lab[:, :, i] = exposure.match_histograms(
+                src_lab[:, :, i], ref_lab[:, :, i]
+            )
+
+        # 转回 BGR
+        matched = cv2.cvtColor(matched_lab, cv2.COLOR_LAB2BGR)
+    else:
+        # --- 黑白模式：直接匹配 ---
+        # 确保转为单通道处理
+        src_gray = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
+        ref_gray = cv2.cvtColor(ref_img, cv2.COLOR_BGR2GRAY)
+        matched = exposure.match_histograms(src_gray, ref_gray)
+
+    # 3. 数据类型转换
+    matched = np.clip(matched, 0, 255).astype(np.uint8)
+
+    # 4. 生成输出路径
+    file_name = os.path.splitext(os.path.basename(source_path))[0] + '_colored.png'
+    output_path = os.path.join(output_dir, file_name)
+
+    # 5. 保存结果
+    cv2.imwrite(output_path, matched)
+    return os.path.abspath(os.path.normpath(output_path))
+
+
 if __name__ == "__main__":
     # # 测试：检测是否黑白图
     # test_img_gray = Image.open(r"F:\CH1 Visiting Home (COMIC X-Eros #52) (02).png")
     # print(isGrayMap(test_img_gray, debug=True))
 
-    # 测试：使图片B向图片A对齐
-    aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\待翻新\[フグタ家] ぼくの彼女 [中国翻訳] [無修正]\_008.jpg",
-                                      img_path=r"F:\JHenTai_data\待翻新\[フグタ家] ぼくの彼女 [中国翻訳] [無修正]\EN\008.jpg", )
+    # # 测试：使图片B向图片A对齐
+    # aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\待翻新\[フグタ家] ぼくの彼女 [中国翻訳] [無修正]\_008.jpg",
+    #                                   img_path=r"F:\JHenTai_data\待翻新\[フグタ家] ぼくの彼女 [中国翻訳] [無修正]\EN\008.jpg", )
+    # if aligned_path_white:
+    #     print(f"成功生成：{aligned_path_white}")
+    # else:
+    #     print("对齐失败")
+
+    # 测试：使图片B向图片A对齐，且对齐颜色
+    aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\E022.png",
+                                      img_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\020_MJK_18_D1350_017.png")
     if aligned_path_white:
         print(f"成功生成：{aligned_path_white}")
-    else:
-        print("对齐失败")
+        aligned_color_img = align_image_color_v2(source_path=aligned_path_white,
+                                                 reference_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\E022.png")
+        print(aligned_color_img)

@@ -130,8 +130,18 @@ def start_ps_task(param, task_id):
             do_action = [config['UseActionGroup'], config['UseActionName']]
         else:
             do_action = None
+        cv2_align = False
+        color_align = False
         if config['cv2Align']:
             cv2_align = config['cv2Align']
+        if config['autoColor']:
+            color_align = config['autoColor']
+        if config['selectionOperate']:
+            selection_contract = config['selectionContract']
+            selection_feather = config['selectionFeather']
+        else:
+            selection_contract = 0
+            selection_feather = 0
         print(f'启动队列：{task_id}')
         pythoncom.CoInitialize()
         for item in task_list:
@@ -151,7 +161,10 @@ def start_ps_task(param, task_id):
                                      color_level=color_level,
                                      filter_blur=filter_blur,
                                      cv2_align=cv2_align,
+                                     color_align=color_align,
                                      filter_sharp=filter_sharp,
+                                     selection_contract=selection_contract,
+                                     selection_feather=selection_feather,
                                      do_action=do_action,
                                      auto_gray=config['autoGray'], save_psd_path=save_psd_path)
             # print(f"PSD已保存：{save_psd_path}")

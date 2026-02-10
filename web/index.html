@@ -89,10 +89,29 @@
                               placeholder="默认在temp_mask" @blur="saveConfig">
                         <template slot="prepend">MASK临时存储文件夹</template>
                     </el-input>
-                    <br>
-                    <el-switch v-model="config.autoGray" active-text="识别黑白图并转灰度"
-                               @change="saveConfig"></el-switch>
-                    <br>
+                    <div>
+                        <el-switch v-model="config.autoGray" active-text="识别黑白图并转灰度"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.autoColor" active-text="尝试自动矫正颜色"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.blurFilter" active-text="上层图片表面模糊"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.blurFilter">
+                        <el-input v-model.number="config.blurFilterRadius" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">半径</template>
+                        </el-input>
+                        <el-input v-model.number="config.blurFilterThreshold" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">阈值</template>
+                        </el-input>
+                        <br>
+                    </div>
                     <el-switch v-model="config.colorLv" active-text="修改上层图片色阶"
                                @change="saveConfig"></el-switch>
                     <br>
@@ -111,23 +130,10 @@
                         </el-input>
                         <br>
                     </div>
-                    <el-switch v-model="config.blurFilter" active-text="上层图片表面模糊"
-                               @change="saveConfig"></el-switch>
-                    <br>
-                    <div v-if="config.blurFilter">
-                        <el-input v-model.number="config.blurFilterRadius" step="0.1" type="number" size="small"
-                                  style="width:120px;" @blur="saveConfig">
-                            <template slot="prepend">半径</template>
-                        </el-input>
-                        <el-input v-model.number="config.blurFilterThreshold" step="0.1" type="number" size="small"
-                                  style="width:120px;" @blur="saveConfig">
-                            <template slot="prepend">阈值</template>
-                        </el-input>
-                        <br>
+                    <div>
+                        <el-switch v-model="config.USMFilter" active-text="上层图片USM锐化"
+                                   @change="saveConfig"></el-switch>
                     </div>
-                    <el-switch v-model="config.USMFilter" active-text="上层图片USM锐化"
-                               @change="saveConfig"></el-switch>
-                    <br>
                     <div v-if="config.USMFilter">
                         <el-input v-model.number="config.USMFilterQuantity" size="small" style="width:120px;"
                                   @blur="saveConfig">
@@ -141,9 +147,24 @@
                                   style="width:120px;" @blur="saveConfig">
                             <template slot="prepend">阈值</template>
                         </el-input>
-                        <br>
                     </div>
-                    <el-switch v-model="config.UseAction" active-text="保存前执行动作" @change="saveConfig"></el-switch>
+                    <div>
+                        <el-switch v-model="config.selectionOperate" active-text="对蒙版选区收缩羽化"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.selectionOperate">
+                        <el-input v-model.number="config.selectionContract" step="1" size="small" type="number"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend" style="padding: 0 5px;">收缩</template>
+                        </el-input>
+                        <el-input v-model.number="config.selectionFeather" step="1" size="small" type="number"
+                                  style="width:150px;" @blur="saveConfig">
+                            <template slot="prepend">羽化(彩图)</template>
+                        </el-input>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.UseAction" active-text="保存前执行动作" @change="saveConfig"></el-switch>
+                    </div>
                     <div v-if="config.UseAction">
                         <el-input v-model="config.UseActionGroup" size="small" style="width:150px;"
                                   placeholder="动作所在分组" @blur="saveConfig">
@@ -207,8 +228,27 @@
                         <template slot="prepend">MASK临时存储文件夹</template>
                     </el-input>
                     <br>
-                    <el-switch v-model="config.autoGray" active-text="识别黑白图并转灰度" @change="saveConfig"></el-switch>
-                    <br>
+                    <div>
+                        <el-switch v-model="config.autoGray" active-text="识别黑白图并转灰度" @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.autoColor" active-text="尝试自动矫正颜色"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.blurFilter" active-text="上层图片表面模糊" @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.blurFilter">
+                        <el-input v-model.number="config.blurFilterRadius" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">半径</template>
+                        </el-input>
+                        <el-input v-model.number="config.blurFilterThreshold" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">阈值</template>
+                        </el-input>
+                        <br>
+                    </div>
                     <el-switch v-model="config.colorLv" active-text="修改上层图片色阶" @change="saveConfig"></el-switch>
                     <br>
                     <div style="margin-left: 5px;" v-if="config.colorLv">
@@ -223,19 +263,6 @@
                         <el-input v-model.number="config.colorLvGray" step="0.1" type="number" size="small"
                                   style="width:150px;" @blur="saveConfig">
                             <template slot="prepend">灰场</template>
-                        </el-input>
-                        <br>
-                    </div>
-                    <el-switch v-model="config.blurFilter" active-text="上层图片表面模糊" @change="saveConfig"></el-switch>
-                    <br>
-                    <div v-if="config.blurFilter">
-                        <el-input v-model.number="config.blurFilterRadius" step="0.1" type="number" size="small"
-                                  style="width:120px;" @blur="saveConfig">
-                            <template slot="prepend">半径</template>
-                        </el-input>
-                        <el-input v-model.number="config.blurFilterThreshold" step="0.1" type="number" size="small"
-                                  style="width:120px;" @blur="saveConfig">
-                            <template slot="prepend">阈值</template>
                         </el-input>
                         <br>
                     </div>
