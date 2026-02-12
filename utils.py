@@ -48,6 +48,26 @@ def isGrayMap(img, threshold=10, debug=False):
         return False
 
 
+def cv2_imread_unicode(file_path, flags=cv2.IMREAD_COLOR):
+    """
+    解决 cv2.imread 无法读取中文路径的问题
+
+    参数:
+        file_path: 图片文件路径（支持中文）
+        flags: cv2 读取标志，默认为 cv2.IMREAD_COLOR
+
+    返回:
+        numpy.ndarray 或 None
+    """
+    try:
+        img_array = np.fromfile(file_path, dtype=np.uint8)
+        img = cv2.imdecode(img_array, flags)
+        return img
+    except Exception as e:
+        print(f"读取图片失败 {file_path}: {e}")
+        return None
+
+
 def infer_single_image(img_path, model, save_dir='', device=DEVICE, threshold=0.5):
     """单图推理并保存掩码"""
     # 加载原图
@@ -451,8 +471,8 @@ def align_images(
         str | None: 对齐成功时返回保存的文件路径，失败时返回 None
     """
     # 读取图片
-    ref = cv2.imread(ref_path)
-    img = cv2.imread(img_path)
+    ref = cv2_imread_unicode(ref_path)
+    img = cv2_imread_unicode(img_path)
 
     if ref is None or img is None:
         if print_log:
@@ -465,17 +485,17 @@ def align_images(
 
     # AKAZE 特征检测（对漫画线条友好）
     detector = cv2.AKAZE_create()
-    kp1, des1 = detector.detectAndCompute(ref_gray, None)
-    kp2, des2 = detector.detectAndCompute(img_gray, None)
+    kp_ref, des_ref = detector.detectAndCompute(ref_gray, None)
+    kp_img, des_img = detector.detectAndCompute(img_gray, None)
 
-    if des1 is None or des2 is None:
+    if des_ref is None or des_img is None:
         if print_log:
             print(f"特征检测失败，无法提取描述子：ref={ref_path}, img={img_path}")
         return None
 
     # 匹配 + 比率测试
     bf = cv2.BFMatcher(cv2.NORM_HAMMING)
-    matches = bf.knnMatch(des1, des2, k=2)
+    matches = bf.knnMatch(des_img, des_ref, k=2)
 
     good = []
     for m, n in matches:
@@ -490,8 +510,8 @@ def align_images(
         return None
 
     # 提取匹配点坐标
-    src_pts = np.float32([kp2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-    dst_pts = np.float32([kp1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+    src_pts = np.float32([kp_img[m.queryIdx].pt for m in good])  # 来自 img
+    dst_pts = np.float32([kp_ref[m.trainIdx].pt for m in good])  # 来自 ref
 
     # 计算单应矩阵
     H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
@@ -541,8 +561,8 @@ def align_image_color(source_path, reference_path, output_dir="temp_align", ):
     """
     # 1. 加载图像
     # 对于黑白漫画，建议直接以灰度模式加载，效果最稳定
-    src_img = cv2.imread(source_path, cv2.IMREAD_GRAYSCALE)
-    ref_img = cv2.imread(reference_path, cv2.IMREAD_GRAYSCALE)
+    src_img = cv2_imread_unicode(source_path, cv2.IMREAD_GRAYSCALE)
+    ref_img = cv2_imread_unicode(reference_path, cv2.IMREAD_GRAYSCALE)
 
     if src_img is None or ref_img is None:
         print("错误：请检查路径，无法读取图片。")
@@ -572,8 +592,8 @@ def align_image_color_v2(source_path, reference_path, output_dir="temp_align"):
         os.makedirs(output_dir)
 
     # 1. 加载原图 (不指定灰度，保留原始通道)
-    src_img = cv2.imread(source_path)
-    ref_img = cv2.imread(reference_path)
+    src_img = cv2_imread_unicode(source_path)
+    ref_img = cv2_imread_unicode(reference_path)
 
     if src_img is None or ref_img is None:
         print("错误：无法读取图片。")

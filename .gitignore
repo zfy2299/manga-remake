@@ -10,3 +10,5 @@ weight/*
 /start.bat
 /updateLog.txt
 /temp_align/
+/其他脚本/ps环境.bat
+/test.py

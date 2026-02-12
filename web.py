@@ -106,8 +106,7 @@ def start_ps_task(param, task_id):
         else:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model = ResNetUNet(n_channels=3, n_classes=1, local_model=True)
-        model.load_state_dict(torch.load(use_model, weights_only=True))
-        model.to(device)
+        model.load_state_dict(torch.load(use_model, weights_only=True, map_location=device))
         temp_mask_dir = 'temp_mask'
         if config['maskTempDir']:
             temp_mask_dir = config['maskTempDir']
