@@ -2,6 +2,7 @@ new Vue({
   el: '#app',
   data: () => ({
     displayAll: false,
+    reverse_display: false,
     match_groups: [],
     match_to_dir: '',
     match_from_dir: '',
@@ -14,6 +15,10 @@ new Vue({
       match_to_dir: 'F:\\JHenTai_data\\single_Pic\\为什么老师会在这里\\12_work',
       match_from_dir: 'F:\\JHenTai_data\\single_Pic\\为什么老师会在这里\\12_work\\111\\汉化',
       match_from_son: false,
+      split_wide: true,
+      match_twice: false,
+      match_twice_point: 500,
+      match_twice_start: 0.7,
       imgMaxWidth: 200,
       imgMaxHeight: 280,
       similar_threshold: 0.5,
@@ -40,6 +45,7 @@ new Vue({
       UseActionGroup: '',
       UseActionName: '',
       rename_copy: true,
+      remain_ext: true,
     },
     configTemp: {},
     draggedItem: null,
@@ -91,6 +97,9 @@ new Vue({
       this.$set(this.match_groups[idx], 'match', '')
       this.$set(this.match_groups[idx], 'matchPath', '')
       this.$set(this.match_groups[idx], 'matchRatio', 0)
+    },
+    addMatch(idx) {
+      this.$set(this.match_groups[idx], 'matchRatio', 1)
     },
     saveConfig() {
       localStorage.setItem('auto-ps-config', JSON.stringify(this.config))

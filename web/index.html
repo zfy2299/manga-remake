@@ -21,6 +21,7 @@
                         <div>1. 以底图为目标，在上层图文件夹中找出与之匹配率最高的</div>
                         <div>2. 若匹配结果不满意，可手动取消匹配，或手动拖动匹配</div>
                         <div>3. 发送任务时，以带箭头的匹配结果为准</div>
+                        <div>4. 匹配结果二次校验：对匹配结果进行匹配点校验，因为耗时所以加了起始值</div>
                     </el-collapse-item>
                 </el-collapse>
                 <div>
@@ -37,6 +38,24 @@
                         <span>寻找上层图时包含子目录：</span>
                         <el-switch v-model="config.match_from_son" @change="saveConfig"></el-switch>
                     </div>
+                    <div>
+                        <span>拆分上层图中的宽图：</span>
+                        <el-switch v-model="config.split_wide" @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
+                        <span>二次校验匹配结果：</span>
+                        <el-switch v-model="config.match_twice" @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.match_twice">
+                        <el-input v-model.number="config.match_twice_point" size="small" style="width:180px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend" style="padding: 0 5px;">最小匹配点数量</template>
+                        </el-input>
+                        <el-input v-model.number="config.match_twice_start" size="small" style="width:180px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend" style="padding: 0 5px;">二次校验起始值</template>
+                        </el-input>
+                    </div>
                     <el-divider direction="horizontal">匹配结果</el-divider>
                     <el-input v-model.number="config.similar_threshold" step="0.01" type="number" size="small"
                               style="width:200px;" @blur="saveConfig">
@@ -45,6 +64,10 @@
                     <div>
                         <span>显示所有匹配率：</span>
                         <el-switch v-model="displayAll" @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
+                        <span>反向显示：</span>
+                        <el-switch v-model="reverse_display" @change="saveConfig"></el-switch>
                     </div>
                     <el-divider direction="horizontal">图片显示</el-divider>
                     <el-input v-model.number="config.imgMaxWidth" size="small" style="width:200px;"
@@ -199,9 +222,14 @@
                     <el-result icon="info" title="请先进行【图片匹配】" subTitle=""></el-result>
                 </div>
                 <div v-else>
-                    <el-switch v-model="config.rename_copy" active-text="未匹配则保留底图" @change="saveConfig"></el-switch>
-                    <br>
-                    <br>
+                    <div>
+                        <el-switch v-model="config.rename_copy" active-text="未匹配则保留底图"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.remain_ext" active-text="保留源图片的拓展名"
+                                   @change="saveConfig"></el-switch>
+                    </div>
                     <div style="display: flex; flex-direction: row-reverse;">
                         <el-button type="primary" size="small" @click="startRename" :disabled="btnDisable">
                             发送任务
@@ -316,7 +344,7 @@
         <div class="content-container">
             <div class="match-group-box" style="border: 1px solid #98de87;">
                 <div class="row-box" v-for="(item, index) in match_groups" :key="index"
-                     v-if="item['matchRatio'] >= config.similar_threshold || displayAll">
+                     v-if="(reverse_display ? item['matchRatio'] < config.similar_threshold : item['matchRatio'] >= config.similar_threshold) || displayAll">
                     <div class="img-with-name">
                         <div class="img-name-box">{{item['raw']}}</div>
                         <div class="img-box"
@@ -331,6 +359,11 @@
                                 <img src="asset/arrow.png" alt="arrow">
                                 <div style="width: 100%; display: flex; flex-direction: row-reverse;">
                                     <el-button type="danger" size="mini" @click="clearMatch(index)">取消</el-button>
+                                </div>
+                            </div>
+                            <div v-else>
+                                <div style="width: 100%; display: flex;">
+                                    <el-button type="success" size="mini" @click="addMatch(index)">信任</el-button>
                                 </div>
                             </div>
                         </div>

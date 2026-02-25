@@ -338,7 +338,8 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
     doc.close(ps.SaveOptions.DoNotSaveChanges)
 
 
-def match_comics_2(folder_a, folder_b, match_from_son=False):
+def match_comics_2(folder_a, folder_b, match_from_son=False, match_twice=False, match_twice_point=100,
+                   match_twice_start=0.5):
     r_ = '**/*' if match_from_son else '*'
     # 定义图像预处理
     preprocess = transforms.Compose([
@@ -403,12 +404,22 @@ def match_comics_2(folder_a, folder_b, match_from_son=False):
         max_similarity = max(similarities)
         max_similarity_index = similarities.index(max_similarity)
         most_similar_img_path = images_b[max_similarity_index]
+        final_ratio = max_similarity
+        if match_twice and final_ratio >= match_twice_start:
+            is_good, _, _, _ = find_good_matches(
+                ref_gray=cv2_imread_unicode(most_similar_img_path, cv2.COLOR_BGR2GRAY),
+                img_gray=cv2_imread_unicode(img_path_a, cv2.COLOR_BGR2GRAY),
+                min_good_matches=100,
+                print_log=False
+            )
+            if not is_good:
+                final_ratio = 0.0
         match_dict.append({
             'raw': os.path.basename(img_path_a),
             'rawPath': img_path_a,
             'match': os.path.basename(most_similar_img_path),
             'matchPath': most_similar_img_path,
-            'matchRatio': max_similarity
+            'matchRatio': final_ratio
         })
     return {'match_result': match_dict, 'a_num': len(images_a), 'b_num': len(images_b)}
 
@@ -448,29 +459,76 @@ def split_image(img_dir, match_from_son=False):
             print(f"Failed to process {img_path}: {e}")
 
 
-def align_images(
-        ref_path,
-        img_path,
-        output_dir="temp_align",
-        min_good_matches=100,
-        fill_color=(255, 255, 255),  # 新增：填充颜色，默认白色
-        print_log=False
-):
+def find_good_matches(
+        ref_gray: np.ndarray,
+        img_gray: np.ndarray,
+        min_good_matches: int = 100,
+        ratio_thresh: float = 0.75,
+        print_log: bool = False):
     """
-    将 img_path 的图片对齐到 ref_path 的图片空间，并保存对齐后的结果。
-    支持自定义 warpPerspective 的填充颜色（例如白色 (255,255,255)）。
-
-    参数:
-        ref_path: 目标参考图片路径（en.png 风格）
-        img_path: 需要对齐的图片路径（zh.jpg 风格）
-        output_dir: 输出目录，默认为当前目录
-        min_good_matches: 最低有效匹配点数阈值，低于此值视为失败
-        fill_color: 填充区域的颜色 (B, G, R)，默认 (0,0,0) 黑色
+    检测并筛选足够的优质匹配点
 
     返回:
-        str | None: 对齐成功时返回保存的文件路径，失败时返回 None
+        Tuple[
+            bool: 是否找到足够好的匹配点,
+            List[cv2.DMatch] | None: 优质匹配点列表（成功时有值）,
+            src_pts: 来自img的匹配点坐标（成功时有值）,
+            dst_pts: 来自ref的匹配点坐标（成功时有值）
+        ]
     """
-    # 读取图片
+    if ref_gray is None or ref_gray.size == 0:
+        if print_log:
+            print("参考图为空，无法提取特征")
+        return False, None, None, None
+
+    if img_gray is None or img_gray.size == 0:
+        if print_log:
+            print("待匹配图为空，无法提取特征")
+        return False, None, None, None
+    # AKAZE 特征检测
+    detector = cv2.AKAZE_create()
+    kp_ref, des_ref = detector.detectAndCompute(ref_gray, None)
+    kp_img, des_img = detector.detectAndCompute(img_gray, None)
+
+    if des_ref is None or des_img is None:
+        if print_log:
+            print("特征检测失败，无法提取描述子")
+        return False, None, None, None
+
+    # 暴力匹配 + 比率测试
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
+    matches = bf.knnMatch(des_img, des_ref, k=2)
+
+    good = []
+    for m, n in matches:
+        if m.distance < ratio_thresh * n.distance:
+            good.append(m)
+
+    if print_log:
+        print(f"有效匹配点数：{len(good)}")
+
+    if len(good) < min_good_matches:
+        if print_log:
+            print(f"匹配点不足（{len(good)} < {min_good_matches}）")
+        return False, None, None, None
+
+    # 提取坐标
+    src_pts = np.float32([kp_img[m.queryIdx].pt for m in good])  # img
+    dst_pts = np.float32([kp_ref[m.trainIdx].pt for m in good])  # ref
+
+    return True, good, src_pts, dst_pts
+
+
+def align_images(
+        ref_path: str,
+        img_path: str,
+        output_dir: str = "temp_align",
+        min_good_matches: int = 100,
+        fill_color: tuple = (255, 255, 255),
+        print_log: bool = False):
+    """
+    将 img_path 的图片对齐到 ref_path 的图片空间，并保存对齐后的结果。
+    """
     ref = cv2_imread_unicode(ref_path)
     img = cv2_imread_unicode(img_path)
 
@@ -479,75 +537,54 @@ def align_images(
             print(f"读取图片失败：ref={ref_path}, img={img_path}")
         return None
 
-    # 转灰度
     ref_gray = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # AKAZE 特征检测（对漫画线条友好）
-    detector = cv2.AKAZE_create()
-    kp_ref, des_ref = detector.detectAndCompute(ref_gray, None)
-    kp_img, des_img = detector.detectAndCompute(img_gray, None)
+    # ── 抽取出来的匹配判断 ────────────────────────────────
+    success, good_matches, src_pts, dst_pts = find_good_matches(
+        ref_gray, img_gray,
+        min_good_matches=min_good_matches,
+        print_log=print_log
+    )
 
-    if des_ref is None or des_img is None:
+    if not success:
         if print_log:
-            print(f"特征检测失败，无法提取描述子：ref={ref_path}, img={img_path}")
+            print(f"匹配失败：ref={ref_path}, img={img_path}")
         return None
-
-    # 匹配 + 比率测试
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
-    matches = bf.knnMatch(des_img, des_ref, k=2)
-
-    good = []
-    for m, n in matches:
-        if m.distance < 0.75 * n.distance:
-            good.append(m)
-    if print_log:
-        print(f"有效匹配点数：{len(good)}")
-
-    if len(good) < min_good_matches:
-        if print_log:
-            print(f"匹配点不足（{len(good)} < {min_good_matches}），对齐失败：ref={ref_path}, img={img_path}")
-        return None
-
-    # 提取匹配点坐标
-    src_pts = np.float32([kp_img[m.queryIdx].pt for m in good])  # 来自 img
-    dst_pts = np.float32([kp_ref[m.trainIdx].pt for m in good])  # 来自 ref
 
     # 计算单应矩阵
     H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
 
-    inlier_ratio = mask.sum() / len(good) if len(good) > 0 else 0
+    inlier_ratio = mask.sum() / len(good_matches) if len(good_matches) > 0 else 0
     if print_log:
         print(f"内点比例：{inlier_ratio:.2%}")
 
     if inlier_ratio < 0.5:
         if print_log:
-            print(f"内点比例过低，对齐不可靠：ref={ref_path}, img={img_path}")
+            print(f"内点比例过低，对齐不可靠")
         return None
 
-    # 进行透视变换对齐，支持自定义填充颜色
+    # 透视变换
     h, w = ref.shape[:2]
     aligned = cv2.warpPerspective(
-        img,
-        H,
-        (w, h),
+        img, H, (w, h),
         borderMode=cv2.BORDER_CONSTANT,
-        borderValue=fill_color  # 这里控制填充颜色
+        borderValue=fill_color
     )
 
-    # 生成输出文件名
+    # 保存
     base_name = os.path.splitext(os.path.basename(img_path))[0]
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{base_name}_aligned.png")
 
-    # 保存
     success = cv2.imwrite(output_path, aligned)
     if not success:
         if print_log:
-            print(f"保存失败：{output_path}：ref={ref_path}, img={img_path}")
+            print(f"保存失败：{output_path}")
         return None
+
     if print_log:
-        print(f"对齐完成，已保存至：{output_path}")
+        print(f"对齐完成：{output_path}")
     return os.path.abspath(os.path.normpath(output_path))
 
 
@@ -651,11 +688,19 @@ if __name__ == "__main__":
     # else:
     #     print("对齐失败")
 
+    # # 测试：使图片B向图片A对齐，且对齐颜色
+    # aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\E022.png",
+    #                                   img_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\020_MJK_18_D1350_017.png")
+    # if aligned_path_white:
+    #     print(f"成功生成：{aligned_path_white}")
+    #     aligned_color_img = align_image_color_v2(source_path=aligned_path_white,
+    #                                              reference_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\E022.png")
+    #     print(aligned_color_img)
+
     # 测试：使图片B向图片A对齐，且对齐颜色
-    aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\E022.png",
-                                      img_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\020_MJK_18_D1350_017.png")
-    if aligned_path_white:
-        print(f"成功生成：{aligned_path_white}")
-        aligned_color_img = align_image_color_v2(source_path=aligned_path_white,
-                                                 reference_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\E022.png")
-        print(aligned_color_img)
+    is_good, _, _, _ = find_good_matches(
+        ref_gray=cv2_imread_unicode(r"F:\JHenTai_data\待翻新\[きづかかずき] エロ漫研とかにようこそ! [DL版]\日文\082.jpg", cv2.COLOR_BGR2GRAY),
+        img_gray=cv2_imread_unicode(r"F:\JHenTai_data\待翻新\[きづかかずき] エロ漫研とかにようこそ! [DL版]\[きづかかずき] エロ漫研とかにようこそ\084.jpg", cv2.COLOR_BGR2GRAY),
+        min_good_matches=100,
+        print_log=True
+    )

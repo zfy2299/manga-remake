@@ -50,12 +50,17 @@ def img_match():
     match_from_dir = data.get("match_from_dir", '未知路径')
     match_to_dir = data.get("match_to_dir", '未知路径')
     match_from_son = data.get("match_from_son", False)
+    match_twice = data.get("match_twice", False)
+    match_twice_point = data.get("match_twice_point", 100)
+    match_twice_start = data.get("match_twice_start", 0.5)
+    split_wide = data.get("split_wide", False)
     if not os.path.exists(match_to_dir) or not os.path.exists(match_from_dir):
         return {
             'code': 400,
             'msg': "路径不存在"
         }
-    split_image(match_from_dir, match_from_son)
+    if split_wide:
+        split_image(match_from_dir, match_from_son)
     # final_result = match_comics(
     #     match_to_dir, match_from_dir,
     #     similarity_threshold=similar_threshold,
@@ -64,7 +69,8 @@ def img_match():
     #     use_align=True
     # )
     final_result = match_comics_2(
-        match_to_dir, match_from_dir, match_from_son=match_from_son
+        match_to_dir, match_from_dir, match_from_son=match_from_son, match_twice=match_twice,
+        match_twice_point=match_twice_point, match_twice_start=match_twice_start
     )
     r_ = '**/*' if match_from_son else '*'
     return {
@@ -205,9 +211,20 @@ def start_rename():
     os.makedirs(save_path, exist_ok=True)
     raw_list = os.listdir(raw_path)
     over_list = []
-    for item in match_list:
-        shutil.copy2(item['matchPath'], os.path.join(save_path, item['raw']))
-        over_list.append(item['raw'])
+    if data['config']['remain_ext']:
+        for item in match_list:
+            source_path = item['matchPath']
+            raw_name = item['raw']
+            ext = os.path.splitext(source_path)[1]
+            base_name = os.path.splitext(raw_name)[0]
+            new_filename = base_name + ext
+            dest_path = os.path.join(save_path, new_filename)
+            shutil.copy2(source_path, dest_path)
+            over_list.append(item['raw'])
+    else:
+        for item in match_list:
+            shutil.copy2(item['matchPath'], os.path.join(save_path, item['raw']))
+            over_list.append(item['raw'])
     if rename_copy:
         for item in raw_list:
             img_path = Path(os.path.join(raw_path, item))
