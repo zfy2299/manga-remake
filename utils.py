@@ -485,19 +485,56 @@ def find_good_matches(
         if print_log:
             print("待匹配图为空，无法提取特征")
         return False, None, None, None
+
     # AKAZE 特征检测
     detector = cv2.AKAZE_create()
     kp_ref, des_ref = detector.detectAndCompute(ref_gray, None)
     kp_img, des_img = detector.detectAndCompute(img_gray, None)
 
-    if des_ref is None or des_img is None:
+    if des_ref is None or des_ref.shape[0] == 0:
         if print_log:
-            print("特征检测失败，无法提取描述子")
+            print("参考图没有任何特征点")
         return False, None, None, None
 
-    # 暴力匹配 + 比率测试
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
-    matches = bf.knnMatch(des_img, des_ref, k=2)
+    if des_img is None or des_img.shape[0] == 0:
+        if print_log:
+            print("目标图没有任何特征点")
+        return False, None, None, None
+
+    if len(kp_ref) < 30 or len(kp_img) < 30:
+        if print_log:
+            print(f"特征点太少：ref={len(kp_ref)}, img={len(kp_img)}")
+        return False, None, None, None
+
+    # ──────────────── 改用 FLANN 匹配器 ────────────────
+    # LSH 算法的 index 类型数值就是 6（FLANN_INDEX_LSH = 6）
+    index_params = dict(
+        algorithm=6,  # ← 这里直接写 6 代替 cv2.FLANN_INDEX_LSH
+        table_number=12,  # 推荐 6~12
+        key_size=20,  # 推荐 10~20
+        multi_probe_level=2  # 推荐 1~2
+    )
+    search_params = dict(checks=50)  # 50~100，越大越准但越慢
+
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+
+    if print_log:
+        print(f"参考图描述子数量: {des_ref.shape[0]}")
+        print(f"目标图描述子数量: {des_img.shape[0]}")
+        print("开始 FLANN knnMatch...")
+
+    try:
+        matches = flann.knnMatch(des_img, des_ref, k=2)
+    except cv2.error as e:
+        if print_log:
+            print(f"FLANN knnMatch 失败: {e}")
+        return False, None, None, None
+
+    for match in matches:
+        if len(match) != 2:
+            if print_log:
+                print(f"{ref_gray} 和 {img_gray} 匹配项长度不足")
+            return False, None, None, None
 
     good = []
     for m, n in matches:
@@ -680,13 +717,16 @@ if __name__ == "__main__":
     # test_img_gray = Image.open(r"F:\CH1 Visiting Home (COMIC X-Eros #52) (02).png")
     # print(isGrayMap(test_img_gray, debug=True))
 
-    # # 测试：使图片B向图片A对齐
-    # aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\待翻新\[フグタ家] ぼくの彼女 [中国翻訳] [無修正]\_008.jpg",
-    #                                   img_path=r"F:\JHenTai_data\待翻新\[フグタ家] ぼくの彼女 [中国翻訳] [無修正]\EN\008.jpg", )
-    # if aligned_path_white:
-    #     print(f"成功生成：{aligned_path_white}")
-    # else:
-    #     print("对齐失败")
+    # 测试：使图片B向图片A对齐
+    aligned_path_white = align_images(
+        ref_path=r"F:\JHenTai_data\待翻新\[陰謀の帝国 (印度カリー)] 婚約者の妹は顔SSR、性格最悪地獄のエロダンス女。\CN\43_C106_044.jpg",
+        img_path=r"F:\JHenTai_data\待翻新\[陰謀の帝国 (印度カリー)] 婚約者の妹は顔SSR、性格最悪地獄のエロダンス女。\043.jpg", )
+    # aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\待翻新\[陰謀の帝国 (印度カリー)] 婚約者の妹は顔SSR、性格最悪地獄のエロダンス女。\044.jpg",
+    #                                   img_path=r"F:\JHenTai_data\待翻新\[陰謀の帝国 (印度カリー)] 婚約者の妹は顔SSR、性格最悪地獄のエロダンス女。\CN\44_C106_045.jpg")
+    if aligned_path_white:
+        print(f"成功生成：{aligned_path_white}")
+    else:
+        print("对齐失败")
 
     # # 测试：使图片B向图片A对齐，且对齐颜色
     # aligned_path_white = align_images(ref_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\E022.png",
@@ -697,10 +737,10 @@ if __name__ == "__main__":
     #                                              reference_path=r"F:\JHenTai_data\[いーむす・アキ] きもちいーむすめ\TEST\E022.png")
     #     print(aligned_color_img)
 
-    # 测试：使图片B向图片A对齐，且对齐颜色
-    is_good, _, _, _ = find_good_matches(
-        ref_gray=cv2_imread_unicode(r"F:\JHenTai_data\待翻新\[きづかかずき] エロ漫研とかにようこそ! [DL版]\日文\082.jpg", cv2.COLOR_BGR2GRAY),
-        img_gray=cv2_imread_unicode(r"F:\JHenTai_data\待翻新\[きづかかずき] エロ漫研とかにようこそ! [DL版]\[きづかかずき] エロ漫研とかにようこそ\084.jpg", cv2.COLOR_BGR2GRAY),
-        min_good_matches=100,
-        print_log=True
-    )
+    # # 测试：使图片B向图片A对齐，且对齐颜色
+    # is_good, _, _, _ = find_good_matches(
+    #     ref_gray=cv2_imread_unicode(r"F:\JHenTai_data\待翻新\[きづかかずき] エロ漫研とかにようこそ! [DL版]\日文\082.jpg", cv2.COLOR_BGR2GRAY),
+    #     img_gray=cv2_imread_unicode(r"F:\JHenTai_data\待翻新\[きづかかずき] エロ漫研とかにようこそ! [DL版]\[きづかかずき] エロ漫研とかにようこそ\084.jpg", cv2.COLOR_BGR2GRAY),
+    #     min_good_matches=100,
+    #     print_log=True
+    # )

@@ -54,7 +54,7 @@ new Vue({
   }),
   methods: {
     resolveImgUrl(path) {
-      return `/images/${this.config.imgMaxWidth}x${this.config.imgMaxHeight}/${path}`
+      return `/images/${this.config.imgMaxWidth}x${this.config.imgMaxHeight}/${encodeURIComponent(path)}`
     },
     myRequest(url, data) {
       return fetch(url, {

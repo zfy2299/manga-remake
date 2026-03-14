@@ -3,6 +3,7 @@ import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import unquote
 
 import torch
 from PIL import Image
@@ -31,7 +32,10 @@ def index():
 
 @app.route('/images/<path:max_size>/<path:filepath>')
 def serve_compress_img(filepath, max_size):
+    filepath = unquote(filepath)
+    filepath = filepath.replace('/', '\\')
     if not os.path.exists(filepath):
+        print(filepath)
         return "图片不存在", 404
     max_temp = max_size.split('x')
     with Image.open(filepath) as img:
