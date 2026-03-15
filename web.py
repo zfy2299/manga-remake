@@ -175,7 +175,7 @@ def start_ps_task(param, task_id):
                                      filter_sharp=filter_sharp,
                                      selection_contract=selection_contract,
                                      selection_feather=selection_feather,
-                                     do_action=do_action,
+                                     do_action=do_action, filter_only_selection=config['filterOnlySelection'],
                                      auto_gray=config['autoGray'], save_psd_path=save_psd_path)
             # print(f"PSD已保存：{save_psd_path}")
         pythoncom.CoUninitialize()

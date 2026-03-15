@@ -172,6 +172,9 @@
                         </el-input>
                     </div>
                     <div>
+                        <el-switch v-model="config.filterOnlySelection" active-text="仅对气泡框外应用滤镜" @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
                         <el-switch v-model="config.selectionOperate" active-text="对蒙版选区收缩羽化"
                                    @change="saveConfig"></el-switch>
                     </div>
@@ -310,6 +313,9 @@
                             <template slot="prepend">阈值</template>
                         </el-input>
                         <br>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.filterOnlySelection" active-text="仅对气泡框外应用滤镜" @change="saveConfig"></el-switch>
                     </div>
                     <el-switch v-model="config.UseAction" active-text="保存前执行动作" @change="saveConfig"></el-switch>
                     <div v-if="config.UseAction">

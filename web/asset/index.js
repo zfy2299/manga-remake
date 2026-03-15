@@ -38,6 +38,7 @@ new Vue({
       USMFilterQuantity: 65,
       USMFilterRadius: 1,
       USMFilterThreshold: 8,
+      filterOnlySelection: false,
       selectionOperate: true,
       selectionContract: 3,
       selectionFeather: 3,

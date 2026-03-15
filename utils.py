@@ -152,11 +152,27 @@ def run_test(weight_path, test_out_dir, batch_size=12):
     test_model(model, weight_path, test_loader, test_out_dir, DEVICE)
 
 
+def load_white_to_selection(ps_app):
+    # 将白色像素载入选区
+    ps_app.doJavaScript(r"""
+        var desc = new ActionDescriptor();
+        var ref = new ActionReference();
+        ref.putProperty(stringIDToTypeID("channel"), stringIDToTypeID("selection"));
+        desc.putReference(charIDToTypeID("null"), ref);
+        desc.putInteger(charIDToTypeID("fzns"), 0); 
+        desc.putDouble(stringIDToTypeID("H"), 0); 
+        desc.putDouble(stringIDToTypeID("H_1"), 0); 
+        desc.putEnumerated(stringIDToTypeID("sample"), stringIDToTypeID("sampleFrom"), stringIDToTypeID("currentLayer"));
+        executeAction(stringIDToTypeID("colorRange"), desc, DialogModes.NO);
+    """)
+
+
 def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_path, auto_gray=False, cv2_align=True,
                              color_align=True, color_level=None, filter_blur=None, filter_sharp=None,
-                             selection_contract=0, selection_feather=0, do_action=None):
+                             filter_only_selection=False, selection_contract=0, selection_feather=0, do_action=None):
     """
 
+    :param filter_only_selection:
     :param selection_feather:
     :param selection_contract:
     :param color_align:
@@ -219,6 +235,27 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
                      "doc);app.activeDocument.selection.deselect(); "
         app.doJavaScript(stdlib_js)
     bg_layer.isBackgroundLayer = True
+    mask_layer = None
+    if mask_img_path is not None:
+        with Session() as ps_:
+            desc = ps_.ActionDescriptor
+            desc.putPath(ps_.app.charIDToTypeID("null"), mask_img_path)
+            ps_.app.executeAction(ps_.app.charIDToTypeID("Plc "), desc)
+        mask_layer = doc.artLayers[0]
+        mask_layer.visible = True
+        mask_layer.rasterize(5)
+        mask_layer.name = "mask"
+    # 各种滤镜
+    selection = None
+    if filter_only_selection:
+        load_white_to_selection(app)
+        try:
+            selection = app.activeDocument.selection
+            t_ = selection.bounds
+            selection.invert()
+        except:
+            pass
+    doc.activeLayer = up_layer
     # 表面模糊
     if filter_blur:
         app.doJavaScript(f"""
@@ -260,26 +297,16 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
             desc256.putInteger(charIDToTypeID("Thsh"), {filter_sharp['threshold']});
             executeAction(idUnsM = charIDToTypeID("UnsM"), desc256, DialogModes.NO);
         """)
-    if mask_img_path is not None:
-        with Session() as ps_:
-            desc = ps_.ActionDescriptor
-            desc.putPath(ps_.app.charIDToTypeID("null"), mask_img_path)
-            ps_.app.executeAction(ps_.app.charIDToTypeID("Plc "), desc)
-        mask_layer = doc.artLayers[0]
-        mask_layer.rasterize(5)
-        mask_layer.name = "mask"
-        # 将白色像素载入选区
-        app.doJavaScript(r"""
-            var desc = new ActionDescriptor();
-            var ref = new ActionReference();
-            ref.putProperty(stringIDToTypeID("channel"), stringIDToTypeID("selection"));
-            desc.putReference(charIDToTypeID("null"), ref);
-            desc.putInteger(charIDToTypeID("fzns"), 0); 
-            desc.putDouble(stringIDToTypeID("H"), 0); 
-            desc.putDouble(stringIDToTypeID("H_1"), 0); 
-            desc.putEnumerated(stringIDToTypeID("sample"), stringIDToTypeID("sampleFrom"), stringIDToTypeID("currentLayer"));
-            executeAction(stringIDToTypeID("colorRange"), desc, DialogModes.NO);
-        """)
+    if mask_img_path is not None and mask_layer is not None:
+        # 先取消选区
+        if selection is not None:
+            try:
+                t_ = selection.bounds
+                selection.deselect()
+            except:
+                pass
+        doc.activeLayer = mask_layer
+        load_white_to_selection(app)
         mask_layer.visible = False
         try:
             selection = app.activeDocument.selection
