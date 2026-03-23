@@ -17,7 +17,7 @@
 需要提前安装PS，本人使用的是PS2022，其他较新的版本理论上也可以（未测试）
 ### 方法一
 下载打包好的文件（仅可调用），解压直接运行`start.bat`
-**注意：**请下载[v1.8打包版](https://github.com/zfy2299/manga-remake/releases/tag/v1.8)，然后下载[最新源码](https://github.com/zfy2299/manga-remake/releases/latest)覆盖。
+<br>注意：请下载[v1.8打包版](https://github.com/zfy2299/manga-remake/releases/tag/v1.8)，然后下载[最新源码](https://github.com/zfy2299/manga-remake/releases/latest)覆盖。
 
 ### 方法二
 下载本项目，安装环境（可重新训练模型），然后运行：
@@ -48,7 +48,7 @@ python web.py
 - 生成PSD时自动对齐图层（使用的是PS自带的功能/cv2特征点匹配，目前感觉cv2效果更好）
 - 生成PSD时判断是否为黑白图，如果是，可选择性转为灰度图
 - 在前端控制对图层调整或使用“色阶”、“表面模糊”、“USM锐化”、“指定的动作”。
-  注意：滤镜顺序是“表面模糊—色阶—USM锐化—指定的动作”
+  <br>注意：滤镜顺序是“表面模糊—色阶—USM锐化—指定的动作”
 - 可选择性使用“尝试自动对齐颜色”（依据图片明亮度调整），效果一般
 
 ## 五、训练
