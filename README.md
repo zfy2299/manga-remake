@@ -15,6 +15,9 @@
 ## 三、使用
 ### 前提
 需要提前安装PS，本人使用的是PS2022，其他较新的版本理论上也可以（未测试）
+### 注意
+请先学习PS的基础知识，现阶段对某些气泡框识别效果不佳，建议使用画笔工具手动微调蒙版区域以改善成图效果。<br>
+小白推荐的视频：[图层与蒙版最通俗易懂的讲解](https://www.bilibili.com/video/BV1HK4y1T7i1)
 ### 方法一
 下载打包好的文件（仅可调用），解压直接运行`start.bat`
 <br>注意：请下载[v1.8打包版](https://github.com/zfy2299/manga-remake/releases/tag/v1.8)，然后下载[最新源码](https://github.com/zfy2299/manga-remake/releases/latest)覆盖。
