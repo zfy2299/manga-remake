@@ -339,6 +339,114 @@
                     </div>
                 </div>
             </el-tab-pane>
+            <el-tab-pane label="仅涂白">
+                <el-collapse>
+                    <el-collapse-item title="功能简介" name="1">
+                        <div>仅生成带涂白图层的PSD</div>
+                    </el-collapse-item>
+                </el-collapse>
+                <div>
+                    <el-divider direction="horizontal">图源文件夹</el-divider>
+                    <el-input v-model="config.match_to_dir" size="small" style="width:360px;"
+                              type="textarea" :autosize="{ minRows: 3}" @blur="saveConfig">
+                    </el-input>
+                    <el-divider direction="horizontal">操作</el-divider>
+                    <div>
+                        <el-switch v-model="config.autoGray" active-text="识别黑白图并转灰度"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.blurFilter" active-text="图片表面模糊"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.blurFilter">
+                        <el-input v-model.number="config.blurFilterRadius" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">半径</template>
+                        </el-input>
+                        <el-input v-model.number="config.blurFilterThreshold" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">阈值</template>
+                        </el-input>
+                        <br>
+                    </div>
+                    <el-switch v-model="config.colorLv" active-text="修改图片色阶"
+                               @change="saveConfig"></el-switch>
+                    <br>
+                    <div style="margin-left: 5px;" v-if="config.colorLv">
+                        <el-input v-model.number="config.colorLvBlack" size="small" style="width:150px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend">黑场</template>
+                        </el-input>
+                        <el-input v-model.number="config.colorLvWhite" size="small" style="width:150px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend">白场</template>
+                        </el-input>
+                        <el-input v-model.number="config.colorLvGray" step="0.1" type="number" size="small"
+                                  style="width:150px;" @blur="saveConfig">
+                            <template slot="prepend">灰场</template>
+                        </el-input>
+                        <br>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.USMFilter" active-text="图片USM锐化"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.USMFilter">
+                        <el-input v-model.number="config.USMFilterQuantity" size="small" style="width:120px;"
+                                  @blur="saveConfig">
+                            <template slot="prepend" style="padding: 0 5px;">数量</template>
+                        </el-input>
+                        <el-input v-model.number="config.USMFilterRadius" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">半径</template>
+                        </el-input>
+                        <el-input v-model.number="config.USMFilterThreshold" step="0.1" type="number" size="small"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend">阈值</template>
+                        </el-input>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.selectionOperate" active-text="对涂白区域收缩羽化"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.selectionOperate">
+                        <el-input v-model.number="config.selectionContract" step="1" size="small" type="number"
+                                  style="width:120px;" @blur="saveConfig">
+                            <template slot="prepend" style="padding: 0 5px;">收缩</template>
+                        </el-input>
+                        <el-input v-model.number="config.selectionFeather" step="1" size="small" type="number"
+                                  style="width:150px;" @blur="saveConfig">
+                            <template slot="prepend">羽化(彩图)</template>
+                        </el-input>
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <el-input v-model.number="config.white_opacity" step="1" size="small" type="number"
+                                  style="width:220px;" @blur="saveConfig">
+                            <template slot="prepend" style="padding: 0 3px;">涂白图层透明度</template>
+                            <template slot="append" style="padding: 0 3px;">%</template>
+                        </el-input>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.UseAction" active-text="保存前执行动作" @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.UseAction">
+                        <el-input v-model="config.UseActionGroup" size="small" style="width:150px;"
+                                  placeholder="动作所在分组" @blur="saveConfig">
+                        </el-input>
+                        <span>—</span>
+                        <el-input v-model="config.UseActionName" size="small" style="width:150px;"
+                                  placeholder="动作名" @blur="saveConfig">
+                        </el-input>
+                    </div>
+                    <br><br>
+                    <div style="display: flex; flex-direction: row-reverse;">
+                        <el-button type="primary" size="small" @click="startPS4" :disabled="btnDisable">
+                            发送任务到PS
+                        </el-button>
+                    </div>
+                </div>
+            </el-tab-pane>
         </el-tabs>
     </div>
     <div style="width: 16px"></div>

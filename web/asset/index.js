@@ -47,6 +47,7 @@ new Vue({
       UseActionName: '',
       rename_copy: true,
       remain_ext: true,
+      white_opacity: 100,
     },
     configTemp: {},
     draggedItem: null,
@@ -215,6 +216,24 @@ new Vue({
         match_list: [this.chooseOne],
         config: this.config,
         no_mask: this.$refs.optionTabs.$data.currentName !== '1'
+      }).then(_ => {
+        window.ELEMENT.Message({
+          message: '任务下发成功，本页面不会提示任务进度！',
+          type: 'success',
+          showClose: true,
+          duration: 4000
+        })
+        return 1
+      }).catch(err => {
+        alert(err.message || err)
+      }).finally(_ => {
+        this.btnDisable = false
+      })
+    },
+    startPS4() {
+      this.btnDisable = true
+      this.myRequest('/api/start_ps_white_only', {
+        config: this.config,
       }).then(_ => {
         window.ELEMENT.Message({
           message: '任务下发成功，本页面不会提示任务进度！',

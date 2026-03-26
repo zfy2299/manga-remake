@@ -365,6 +365,136 @@ def ps_auto_composite_layers(bg_img_path, top_img_path, mask_img_path, save_psd_
     doc.close(ps.SaveOptions.DoNotSaveChanges)
 
 
+def ps_auto_white(img_path, mask_img_path, save_psd_path, auto_gray=False, white_opacity=100,
+                  color_level=None, filter_blur=None, filter_sharp=None,
+                  selection_contract=0, selection_feather=0, do_action=None):
+    """
+    仅涂白
+    :param img_path:
+    :param white_opacity:
+    :param selection_feather:
+    :param selection_contract:
+    :param mask_img_path:
+    :param auto_gray:
+    :param color_level: 色阶的参数，比如：黑场12、白场230、灰场0.8 -> {'black': 12, 'white': 230, 'gray': 0.8}
+    :param filter_blur: 表面模糊的参数，推荐：半径3、阈值8 -> {'radius': 3, 'threshold': 8}
+    :param filter_sharp: USM锐化的参数，推荐：数量65、半径1、阈值8 -> {'quantity': 65, 'radius': 1, 'threshold': 8}
+    :param do_action: 关闭前要运行的动作，比如['动作分组名', '动作名']
+    :param save_psd_path:
+    :return:
+    """
+    if mask_img_path is not None:
+        mask_img_path = os.path.abspath(os.path.normpath(mask_img_path))
+    # ========== 文件有效性校验 ==========
+    file_check = [(img_path, "底图")]
+    print(mask_img_path)
+    if mask_img_path is not None:
+        file_check.append((mask_img_path, "MASK图"))
+    for path, name in file_check:
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"❌ {name}文件不存在 → {path}")
+    app = ps.Application()
+    doc = app.open(img_path)
+    if doc.mode == 6:
+        doc.changeMode(1)  # 1是灰度，2是RGB，3是CMYK，6是索引
+    bg_layer = doc.artLayers[0]
+    bg_layer.name = "背景图层"
+    # ========== 灰度图判定 ==========
+    is_gray = isGrayMap(Image.open(img_path))
+    if auto_gray and doc.channels.length > 1 and is_gray:
+        app.doJavaScript("app.activeDocument.changeMode(ChangeMode.GRAYSCALE);")
+    # 各种滤镜
+    # 表面模糊
+    if filter_blur:
+        app.doJavaScript(f"""
+            var desc227 = new ActionDescriptor();
+            desc227.putUnitDouble(charIDToTypeID("Rds "), charIDToTypeID("#Pxl"), {filter_blur['radius']});
+            desc227.putInteger(charIDToTypeID("Thsh"), {filter_blur['threshold']} );
+            executeAction(stringIDToTypeID("surfaceBlur"), desc227, DialogModes.NO );
+        """)
+    # 色阶
+    if color_level and auto_gray and is_gray:
+        app.doJavaScript(f"""
+            var desc284 = new ActionDescriptor();
+            var idpresetKind = stringIDToTypeID( "presetKind" );
+            var idpresetKindType = stringIDToTypeID( "presetKindType" );
+            var idpresetKindCustom = stringIDToTypeID( "presetKindCustom" );
+            desc284.putEnumerated( idpresetKind, idpresetKindType, idpresetKindCustom );
+            var list4 = new ActionList();
+            var desc285 = new ActionDescriptor();
+            var idChnl = charIDToTypeID( "Chnl" );
+            var ref3 = new ActionReference();
+            var idChnl = charIDToTypeID( "Chnl" );
+            ref3.putEnumerated( idChnl, charIDToTypeID( "Ordn" ), charIDToTypeID( "Trgt" ) );
+            desc285.putReference( idChnl, ref3 );
+            var list5 = new ActionList();
+            list5.putInteger( {color_level['black']} );
+            list5.putInteger( {color_level['white']} );
+            desc285.putList( charIDToTypeID( "Inpt" ), list5 );
+            desc285.putDouble( charIDToTypeID( "Gmm " ), {color_level['gray']} );
+            list4.putObject( charIDToTypeID( "LvlA" ), desc285 );
+            desc284.putList( charIDToTypeID( "Adjs" ), list4 );
+            executeAction( charIDToTypeID( "Lvls" ), desc284, DialogModes.NO );
+        """)
+    # USM锐化
+    if filter_sharp:
+        app.doJavaScript(f"""
+            var desc256 = new ActionDescriptor();
+            desc256.putUnitDouble(charIDToTypeID("Amnt"), charIDToTypeID("#Prc"), {filter_sharp['quantity']});
+            desc256.putUnitDouble(charIDToTypeID("Rds "), charIDToTypeID("#Pxl"), {filter_sharp['radius']});
+            desc256.putInteger(charIDToTypeID("Thsh"), {filter_sharp['threshold']});
+            executeAction(idUnsM = charIDToTypeID("UnsM"), desc256, DialogModes.NO);
+        """)
+    # 导入mask图层
+    bg_layer.isBackgroundLayer = True
+    mask_layer = None
+    if mask_img_path is not None:
+        with Session() as ps_:
+            desc = ps_.ActionDescriptor
+            desc.putPath(ps_.app.charIDToTypeID("null"), mask_img_path)
+            ps_.app.executeAction(ps_.app.charIDToTypeID("Plc "), desc)
+        mask_layer = doc.artLayers[0]
+        mask_layer.visible = True
+        mask_layer.rasterize(5)
+        mask_layer.name = "mask"
+    if mask_img_path is not None and mask_layer is not None:
+        # 根据蒙版建立选区
+        doc.activeLayer = mask_layer
+        load_white_to_selection(app)
+        mask_layer.visible = False
+        try:
+            selection = app.activeDocument.selection
+            t_ = selection.bounds
+            if selection_contract:
+                selection.contract(selection_contract)  # 收缩选区
+            if selection_feather:
+                selection.feather(selection_feather)  # 羽化
+            # 涂白
+            selection = app.activeDocument.selection
+            t_ = selection.bounds
+            white_layer = doc.artLayers.add()
+            white_layer.name = "涂白"
+            fill_color = ps.SolidColor()
+            fill_color.rgb.red = 255
+            fill_color.rgb.green = 255
+            fill_color.rgb.blue = 255
+            doc.selection.fill(fill_color)
+            white_layer.opacity = white_opacity
+        except:
+            pass
+        mask_layer.remove()
+    if do_action:
+        app.doAction(do_action[1], do_action[0])
+    # 72dpi
+    app.doJavaScript("""
+        var desc1 = new ActionDescriptor();
+        desc1.putUnitDouble(charIDToTypeID('Rslt'), charIDToTypeID('#Rsl'), 72);
+        executeAction(stringIDToTypeID('imageSize'), desc1, DialogModes.NO);
+    """)
+    doc.saveAs(save_psd_path, ps.PhotoshopSaveOptions())
+    doc.close(ps.SaveOptions.DoNotSaveChanges)
+
+
 def match_comics_2(folder_a, folder_b, match_from_son=False, match_twice=False, match_twice_point=100,
                    match_twice_start=0.5):
     r_ = '**/*' if match_from_son else '*'
@@ -406,7 +536,7 @@ def match_comics_2(folder_a, folder_b, match_from_son=False, match_twice=False, 
         return F.cosine_similarity(feat1, feat2)
 
     # 获取文件夹 A 和 B 中的图片路径
-    support_images = ('.png', '.jpg', '.jpeg', '.webp', '.avif')
+    support_images = ('.png', '.jpg', '.jpeg', '.bmp', '.webp', '.avif')
     images_a = [
         str(img_path.absolute())
         for img_path in Path(folder_a).glob('*')

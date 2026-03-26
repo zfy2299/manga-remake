@@ -11,7 +11,7 @@ from flask import Flask, send_from_directory, send_file, request
 import pythoncom
 
 from ResNetUNet import ResNetUNet
-from utils import infer_single_image, ps_auto_composite_layers, match_comics_2, split_image
+from utils import infer_single_image, ps_auto_composite_layers, match_comics_2, split_image, ps_auto_white
 
 # 关键配置：static_folder 指定静态文件根目录为 web
 # Flask 自动将 / 映射为 web/index.html，且支持访问目录内所有文件
@@ -187,6 +187,79 @@ def start_ps_task(param, task_id):
         task_ids.remove(task_id)
 
 
+def start_ps_white_task(param, task_id):
+    try:
+        config = param['config']
+        task_path = config['match_to_dir']
+        models = os.listdir('weight')
+        if len(models) == 0:
+            print(f"weight目录下未找到模型文件")
+            return
+        use_model = os.path.join('weight', models[-1])
+        if config['maskUseCPU']:
+            device = torch.device("cpu")
+        else:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = ResNetUNet(n_channels=3, n_classes=1, local_model=True).to(device)
+        model.load_state_dict(torch.load(use_model, weights_only=True, map_location=device))
+        model.eval()
+        temp_mask_dir = 'temp_mask'
+        if config['maskTempDir']:
+            temp_mask_dir = config['maskTempDir']
+        os.makedirs(temp_mask_dir, exist_ok=True)
+        if config['colorLv']:
+            color_level = {'black': config['colorLvBlack'], 'white': config['colorLvWhite'],
+                           'gray': config['colorLvGray']}
+        else:
+            color_level = None
+        if config['blurFilter']:
+            filter_blur = {'radius': config['blurFilterRadius'], 'threshold': config['blurFilterThreshold']}
+        else:
+            filter_blur = None
+        if config['USMFilter']:
+            filter_sharp = {'quantity': config['USMFilterQuantity'], 'radius': config['USMFilterRadius'],
+                            'threshold': config['USMFilterThreshold']}
+        else:
+            filter_sharp = None
+        if config['UseAction']:
+            do_action = [config['UseActionGroup'], config['UseActionName']]
+        else:
+            do_action = None
+        if config['selectionOperate']:
+            selection_contract = config['selectionContract']
+            selection_feather = config['selectionFeather']
+        else:
+            selection_contract = 0
+            selection_feather = 0
+        print(f'启动队列：{task_id}')
+        pythoncom.CoInitialize()
+        images_ = [
+            p for p in Path(task_path).glob('*')
+            if p.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.gif', '.webp'] and p.is_file()
+        ]
+        for item in images_:
+            if not os.path.exists(item):
+                print(f"路径不存在：{item}")
+            save_psd_path = os.path.join(task_path, 'PSD', item.with_suffix('.psd').name)
+            os.makedirs(os.path.dirname(save_psd_path), exist_ok=True)
+            item_path = str(item.absolute())
+            mask_path = infer_single_image(item_path, model, save_dir=temp_mask_dir, device=device)
+            ps_auto_white(item_path, mask_path, color_level=color_level,
+                          filter_blur=filter_blur,
+                          filter_sharp=filter_sharp,
+                          selection_contract=selection_contract,
+                          selection_feather=selection_feather,
+                          do_action=do_action, white_opacity=config['white_opacity'],
+                          auto_gray=config['autoGray'], save_psd_path=save_psd_path)
+        pythoncom.CoUninitialize()
+        print(f"队列已完成...")
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        task_ids.remove(task_id)
+
+
 @app.route('/api/start_ps', methods=['POST'])
 def start_ps():
     data = request.get_json(force=True)
@@ -200,6 +273,28 @@ def start_ps():
         }
     task_ids.append(task_id)
     executor.submit(start_ps_task, data, task_id)
+    return {
+        'code': 200
+    }
+
+
+@app.route('/api/start_ps_white_only', methods=['POST'])
+def start_ps_white_only():
+    data = request.get_json(force=True)
+    p = data['config']['match_to_dir']
+    if not os.path.exists(p):
+        return {
+            'code': 400,
+            'msg': '输入路径不存在!'
+        }
+    task_id = p
+    if task_id in task_ids:
+        return {
+            'code': 400,
+            'msg': '此任务正在执行！'
+        }
+    task_ids.append(task_id)
+    executor.submit(start_ps_white_task, data, task_id)
     return {
         'code': 200
     }
