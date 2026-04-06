@@ -7,6 +7,7 @@ import shutil
 import numpy as np
 from PIL import Image
 import pillow_avif
+from photoshop.api import PNGSaveOptions, SaveOptions, JPEGSaveOptions
 from skimage import exposure
 from tqdm import tqdm
 import torch
@@ -867,6 +868,66 @@ def align_image_color_v2(source_path, reference_path, output_dir="temp_align"):
     # 5. 保存结果
     cv2.imwrite(output_path, matched)
     return os.path.abspath(os.path.normpath(output_path))
+
+
+def psd_to_png(psd_path, out__dir='PNG', compression=9):
+    """
+    处理PSD文件，根据图层数量导出PNG
+    :param compression:
+    :param out__dir:
+    :param psd_path: PSD文件的完整路径（支持字符串或Path对象）
+    """
+    psd_path = Path(psd_path)
+    output_png = (Path(psd_path).parent / out__dir / psd_path.with_suffix(".png").name).absolute()
+
+    def get_min_compress_png_options():
+        png_options = PNGSaveOptions()
+        png_options.compression = compression
+        png_options.interlaced = False
+        png_options.optimizedColorPalette = False
+        return png_options
+
+    if not psd_path.exists():
+        print(f"文件不存在：{psd_path}")
+        return
+
+    with Session() as ps:
+        # 手动设置PS界面不可见（兼容所有版本）
+        ps.app.visible = False
+        doc = ps.app.open(str(psd_path))
+        doc.saveAs(str(output_png), get_min_compress_png_options(), True)
+        doc.close(SaveOptions.DoNotSaveChanges)
+
+
+def psd_to_jpg(psd_path, out_dir='PNG', quality=12):
+    """
+    处理PSD文件，导出JPG格式
+    :param psd_path: PSD文件的完整路径（支持字符串或Path对象）
+    :param out_dir: 输出文件夹名称，默认 JPG
+    :param quality: JPG质量 0-12，默认12（最高质量）
+    """
+    psd_path = Path(psd_path)
+    output_jpg = (Path(psd_path).parent / out_dir / psd_path.with_suffix(".jpg").name).absolute()
+
+    def get_jpg_save_options():
+        jpg_options = JPEGSaveOptions()
+        jpg_options.quality = quality
+        jpg_options.embedColorProfile = True
+        jpg_options.formatOptions = 1
+        jpg_options.scans = 3
+        jpg_options.matte = 1
+        return jpg_options
+
+    if not psd_path.exists():
+        print(f"文件不存在：{psd_path}")
+        return
+    output_jpg.parent.mkdir(exist_ok=True)
+    with Session() as ps:
+        ps.app.visible = False
+        doc = ps.app.open(str(psd_path))
+        # 保存 JPG
+        doc.saveAs(str(output_jpg), get_jpg_save_options(), True)
+        doc.close(SaveOptions.DoNotSaveChanges)
 
 
 if __name__ == "__main__":

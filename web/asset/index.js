@@ -48,6 +48,11 @@ new Vue({
       rename_copy: true,
       remain_ext: true,
       white_opacity: 100,
+      psd_dir: '',
+      psd_out_dir: 'PNGout',
+      png_compression: 9,
+      color_jpg: true,
+      jpg_quality: 12,
     },
     configTemp: {},
     draggedItem: null,
@@ -112,6 +117,19 @@ new Vue({
         this.match_groups = res['match_result']
         this.match_to_dirNum = res['match_from_num']
         this.match_from_dirNum = res['match_dir_num']
+        this.match_from_list = res['match_from_list']
+      }).catch(err => {
+        alert(err)
+      }).finally(_ => {
+        this.btnDisable = false
+      })
+      this.match_to_dir = this.config['match_to_dir']
+      this.match_from_dir = this.config['match_from_dir']
+    },
+    startMatch_2() {
+      this.btnDisable = true
+      this.myRequest('/api/img_match_name', this.config).then(res => {
+        this.match_groups = res['match_result']
         this.match_from_list = res['match_from_list']
       }).catch(err => {
         alert(err)
@@ -233,6 +251,24 @@ new Vue({
     startPS4() {
       this.btnDisable = true
       this.myRequest('/api/start_ps_white_only', {
+        config: this.config,
+      }).then(_ => {
+        window.ELEMENT.Message({
+          message: '任务下发成功，本页面不会提示任务进度！',
+          type: 'success',
+          showClose: true,
+          duration: 4000
+        })
+        return 1
+      }).catch(err => {
+        alert(err.message || err)
+      }).finally(_ => {
+        this.btnDisable = false
+      })
+    },
+    startPS5() {
+      this.btnDisable = true
+      this.myRequest('/api/start_ps_output', {
         config: this.config,
       }).then(_ => {
         window.ELEMENT.Message({

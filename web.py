@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import shutil
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -9,9 +10,11 @@ import torch
 from PIL import Image
 from flask import Flask, send_from_directory, send_file, request
 import pythoncom
+from photoshop import Session
 
 from ResNetUNet import ResNetUNet
-from utils import infer_single_image, ps_auto_composite_layers, match_comics_2, split_image, ps_auto_white
+from utils import infer_single_image, ps_auto_composite_layers, match_comics_2, split_image, ps_auto_white, psd_to_jpg, \
+    psd_to_png
 
 # 关键配置：static_folder 指定静态文件根目录为 web
 # Flask 自动将 / 映射为 web/index.html，且支持访问目录内所有文件
@@ -90,6 +93,63 @@ def img_match():
                 }
                 for img_path in Path(match_from_dir).glob(r_)
                 if img_path.is_file() and img_path.suffix.lower() in image_extensions
+            ]
+        }
+    }
+
+
+@app.route('/api/img_match_name', methods=['POST'])
+def img_match_name():
+    def natural_sort_key(filename):
+        return [int(part) if part.isdigit() else part.lower() for part in re.split(r'(\d+)', filename)]
+
+    def get_image_files(dir_path):
+        files = []
+        for f in os.listdir(dir_path):
+            file_path = os.path.join(dir_path, f)
+            # 只保留文件 + 后缀在允许列表内
+            if os.path.isfile(file_path) and os.path.splitext(f)[1].lower() in image_extensions:
+                files.append(f)
+        return files
+
+    data = request.get_json(force=True)
+    match_from_dir = data.get("match_from_dir", '未知路径')
+    match_to_dir = data.get("match_to_dir", '未知路径')
+    if not os.path.exists(match_to_dir) or not os.path.exists(match_from_dir):
+        return {
+            'code': 400,
+            'msg': "路径不存在"
+        }
+    from_files = get_image_files(match_from_dir)
+    to_files = get_image_files(match_to_dir)
+    # 2. 自然排序（按文件名中的数字排序）
+    from_files.sort(key=natural_sort_key)
+    to_files.sort(key=natural_sort_key)
+    # 3. 按顺序一一配对生成结果
+    result = []
+    min_len = min(len(from_files), len(to_files))
+    for i in range(min_len):
+        match_name = from_files[i]
+        raw_name = to_files[i]
+        raw_path = os.path.join(match_to_dir, raw_name).replace('\\', '/')
+        match_path = os.path.join(match_from_dir, match_name).replace('\\', '/')
+        result.append({
+            "raw": raw_name,
+            "rawPath": raw_path,
+            "match": match_name,
+            "matchPath": match_path,
+            "matchRatio": 1
+        })
+    return {
+        'code': 200,
+        'data': {
+            'match_result': result,
+            'match_from_list': [
+                {
+                    "name": img_name,
+                    "path": os.path.join(match_from_dir, img_name)
+                }
+                for img_name in from_files
             ]
         }
     }
@@ -260,6 +320,37 @@ def start_ps_white_task(param, task_id):
         task_ids.remove(task_id)
 
 
+def start_ps_output_task(param, task_id):
+    try:
+        config = param['config']
+        task_path = config['psd_dir']
+        out__dir = config['psd_out_dir']
+        if not os.path.exists(Path(task_path) / out__dir):
+            os.makedirs(Path(task_path) / out__dir, exist_ok=True)
+        pythoncom.CoInitialize()
+        print(f'启动队列：{task_id}')
+        for psd in Path(task_path).rglob('*.PSD'):
+            psd_path = psd
+            if config['color_jpg']:
+                with Session() as ps:
+                    ps.app.visible = False
+                    doc = ps.app.open(str(psd_path))
+                    layer_count = len(doc.channels)
+                    if layer_count > 1:
+                        psd_to_jpg(psd_path, out__dir, config['jpg_quality'])
+                    else:
+                        psd_to_png(psd_path, out__dir, config['png_compression'])
+            else:
+                psd_to_png(psd_path, out__dir, config['png_compression'])
+        pythoncom.CoUninitialize()
+        print(f"队列已完成...")
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+    finally:
+        task_ids.remove(task_id)
+
+
 @app.route('/api/start_ps', methods=['POST'])
 def start_ps():
     data = request.get_json(force=True)
@@ -295,6 +386,28 @@ def start_ps_white_only():
         }
     task_ids.append(task_id)
     executor.submit(start_ps_white_task, data, task_id)
+    return {
+        'code': 200
+    }
+
+
+@app.route('/api/start_ps_output', methods=['POST'])
+def start_ps_output():
+    data = request.get_json(force=True)
+    p = data['config']['psd_dir']
+    if not os.path.exists(p):
+        return {
+            'code': 400,
+            'msg': '输入路径不存在!'
+        }
+    task_id = p
+    if task_id in task_ids:
+        return {
+            'code': 400,
+            'msg': '此任务正在执行！'
+        }
+    task_ids.append(task_id)
+    executor.submit(start_ps_output_task, data, task_id)
     return {
         'code': 200
     }

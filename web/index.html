@@ -22,6 +22,7 @@
                         <div>2. 若匹配结果不满意，可手动取消匹配，或手动拖动匹配</div>
                         <div>3. 发送任务时，以带箭头的匹配结果为准</div>
                         <div>4. 匹配结果二次校验：对匹配结果进行匹配点校验，因为耗时所以加了起始值</div>
+                        <div>5. 文件名顺序匹配：不匹配子目录，只按照文件名顺序依次排序对应</div>
                     </el-collapse-item>
                 </el-collapse>
                 <div>
@@ -83,7 +84,11 @@
                     <br>
                     <div style="display: flex; flex-direction: row-reverse;">
                         <el-button type="primary" size="small" @click="startMatch" :disabled="btnDisable">
-                            开始匹配
+                            开始特征匹配
+                        </el-button>
+                        <el-button style="margin-right: 10px"
+                                   type="warning" size="small" @click="startMatch_2" :disabled="btnDisable">
+                            文件名顺序匹配
                         </el-button>
                     </div>
                 </div>
@@ -442,6 +447,55 @@
                     <br><br>
                     <div style="display: flex; flex-direction: row-reverse;">
                         <el-button type="primary" size="small" @click="startPS4" :disabled="btnDisable">
+                            发送任务到PS
+                        </el-button>
+                    </div>
+                </div>
+            </el-tab-pane>
+            <el-tab-pane label="导出图片">
+                <el-collapse>
+                    <el-collapse-item title="功能简介" name="1">
+                        <div>1. 将图片以png格式导出</div>
+                        <div>2. 若勾选“彩图jpg”，那么彩图将以最佳质量jpg格式导出以节省空间。</div>
+                        <div>3. PNG都是无损图，压缩强度越大，图片越小，推荐最大</div>
+                        <div>4. JPG图片质量：越大则图片越清晰，文件大小越大</div>
+                        <div>5. 补充说明：一般而言，黑白灰度图导出为png会比RGB格式的JPG文件小；PNG的彩图太大了且导图太慢，导出JPG可省空间和时间</div>
+                    </el-collapse-item>
+                </el-collapse>
+                <div>
+                    <el-divider direction="horizontal">图源文件夹</el-divider>
+                    <el-input v-model="config.psd_dir" size="small" style="width:360px;"
+                              type="textarea" :autosize="{ minRows: 3}" @blur="saveConfig">
+                    </el-input>
+                    <el-divider direction="horizontal">选项</el-divider>
+                    <el-input v-model="config.psd_out_dir" step="1" size="small"
+                              style="width:300px;" @blur="saveConfig">
+                        <template slot="prepend" style="padding: 0 3px;">保存目录名</template>
+                    </el-input>
+                    <div style="display: flex; align-items: center;">
+                        <span style="margin-right: 4px;">PNG压缩强度</span>
+                        <el-slider style="width: 200px;" :min="0" :max="9"
+                                v-model="config.png_compression"
+                                :step="1"
+                                show-stops>
+                        </el-slider>
+                        <span style="margin-left: 10px;">{{ config.png_compression }}</span>
+                    </div>
+                    <div>
+                        <el-switch v-model="config.color_jpg" active-text="彩图JPG"
+                                   @change="saveConfig"></el-switch>
+                    </div>
+                    <div v-if="config.color_jpg" style="display: flex; align-items: center;">
+                        <span style="margin-right: 4px;">JPG图片质量</span>
+                        <el-slider style="width: 200px;" :min="8" :max="12"
+                                v-model="config.jpg_quality"
+                                :step="1"
+                                show-stops>
+                        </el-slider>
+                        <span style="margin-left: 10px;">{{ config.jpg_quality }}</span>
+                    </div>
+                    <div style="display: flex; flex-direction: row-reverse;">
+                        <el-button type="primary" size="small" @click="startPS5" :disabled="btnDisable">
                             发送任务到PS
                         </el-button>
                     </div>
